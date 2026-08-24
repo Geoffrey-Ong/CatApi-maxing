@@ -26,7 +26,6 @@ function displayCats(cats) {
         const card = document.createElement("div");
         card.className = "cat-card";
         card.innerHTML = `
-            <div class="cat-id">${cat.id}</div>
             <h3>${cat.name}</h3>
             <p class="cat-breed">${cat.breed}</p>
             <p>${cat.age} years old</p>
