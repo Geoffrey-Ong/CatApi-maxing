@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Cat Finder</title>
+    <link rel="stylesheet" href="style.css" >
+</head>
+
+
+<body>
+    <header>
+        <h1>🚗 Simple Cat Finder</h1>
+        <p> A website powered by a REST API </p>
+    </header>
+    <main>
+
+        <!-- SEARCH -->
+        <section class="search">
+            <input type="text" id="searchInput" placeholder="Search for a cat...">
+            <button onclick="searchCats()"> Search </button>
+            <button class="secondary" onclick="loadCats()"> Show All </button>
+
+        </section>
+
+        <section>
+            <h2>Cats</h2>
+            <div id="catList" class="cat-list">
+                Loading cats...
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p> Data provided by the Simple Cat API </p>
+    </footer>
+    <script src="app.js"></script>
+</body>
+</html>
