@@ -1,2 +1,2 @@
 # CatApi-maxing
-A simple car API Project 
+A simple cat API Project 
