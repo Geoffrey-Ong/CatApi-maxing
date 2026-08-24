@@ -1,4 +1,4 @@
-const API_URL = "https://catapimaxingfr.vercel.app";
+const API_URL = "https://cat-api-maxingthesequel.vercel.app";
 
 
 // GET ALL CATS

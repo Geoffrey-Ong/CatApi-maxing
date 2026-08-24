@@ -87,21 +87,6 @@ def get_cats():
         "cats": cats
     }
 
-
-# GET ONE CAT
-@app.get("/cats/{cat_id}")
-def get_cat(cat_id: int):
-
-    for cat in cats:
-
-        if cat["id"] == cat_id:
-            return cat
-
-    raise HTTPException(
-        status_code=404,
-        detail="Cat not found."
-    )
-
 # SEARCH CATS
 @app.get("/cats/search")
 def search_cats( q: str = Query(..., min_length=1)):
@@ -122,3 +107,20 @@ def search_cats( q: str = Query(..., min_length=1)):
         "count": len(results),
         "results": results
     }
+
+
+# GET ONE CAT
+@app.get("/cats/{cat_id}")
+def get_cat(cat_id: int):
+
+    for cat in cats:
+
+        if cat["id"] == cat_id:
+            return cat
+
+    raise HTTPException(
+        status_code=404,
+        detail="Cat not found."
+    )
+
+
