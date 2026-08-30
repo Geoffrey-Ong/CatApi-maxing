@@ -414,6 +414,8 @@ def search_cats( q: str = Query(..., min_length=1)):
             f"{cat['name']} "
             f"{cat['breed']} "
             f"{cat['color']}"
+            f"{cat['gender']}"
+            f"{cat['breed']}"
         ).lower()
 
         if q in searchable_text:
