@@ -5,29 +5,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Cat Finder</title>
+    <title>Cat Takers</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=\
+    Jost:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css" >
 </head>
 
 
 <body>
-    <header>
-        <h1>🐈 Simple Cat Finder</h1>
-        <p> A website powered by a REST API </p>
+     <header class="site-header" id="top">
+        <div class="nav-wrap">
+            <a class="brand" href="#top">
+                <span class="brand-icon">🐾</span>
+                <span class="brand-name"><h3>Cat Takers</h3></span>
+            </a>
+ 
+            <nav class="main-nav">
+                <a href="#top" class="nav-pill active">Home</a>
+                <a href="#" class="nav-link" onclick="return false;">About Us</a>
+                <a href="#" class="nav-link" onclick="return false;">About the Site</a>
+                <a href="#" class="nav-link" onclick="return false;">Contact</a>
+            </nav>
+ 
+            <button class="cta-button" onclick="scrollToCats()">Adopt Now</button>
+        </div>
     </header>
-    <main>
-        <h1>🐈 Simple Cat Finder</h1>
-        <p> A website powered by a REST API </p>
 
-        <!-- SEARCH -->
-        <section class="search">
+    <section class="hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Find your new best friend</p>
+            <h1>Every cat deserves <span>a place to land.</span></h1>
+            <p class="hero-sub">
+                Cat Takers connects cats who need homes with people who have room in
+                theirs. Scroll down to search our current cats or browse everyone
+                waiting for a family.
+            </p>
+            <button class="cta-button large" onclick="scrollToCats()">Meet the Devil Spawns ↓</button>
+        </div>
+ 
+        <div class="hero-art" aria-hidden="true">
+            <div class="art-block block-a">
+                <span class="art-icon icon-cat-face"></span>
+            </div>
+            <div class="art-block block-b">
+                <span class="art-icon icon-paw"></span>
+            </div>
+            <div class="art-block block-c">
+                <span class="art-icon icon-cat-full"></span>
+            </div>
+        </div>
+    </section>
+ 
+    <div id="stickySentinel"></div>
+    <div class="search-bar-sticky" id="searchSticky">
+        <div class="search-inner">
             <input type="text" id="searchInput" placeholder="Search for a cat...">
-            <button onclick="searchCats()"> Search </button>
-            <button class="secondary" onclick="loadCats()"> Show All </button>
-
-        </section>
-
-        <section>
+            <button onclick="searchCats()">Search</button>
+            <button class="secondary" onclick="loadCats()">Show All</button>
+        </div>
+    </div>
+ 
+    <main>
+        <section id="catsSection">
             <h2>Cats</h2>
             <div id="catList" class="cat-list">
                 Loading cats...
@@ -36,8 +77,23 @@
     </main>
 
     <footer>
-        <p> Data provided by the Simple Cat API </p>
+        <p> Data provided by the Simple Cat API. Website inspiration from https://www.thecatsanctuary.ph</p>
     </footer>
+
+    <div id="catModal" class="modal-overlay" onclick="handleOverlayClick(event)">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+            <div class="modal-image">
+                <span class="modal-cat-emoji">🐈</span>
+            </div>
+            <div class="modal-details">
+                <h2 id="modalCatName"></h2>
+                <p class="cat-breed" id="modalCatBreed"></p>
+                <div class="modal-detail-grid" id="modalDetailGrid"></div>
+                <p class="modal-description" id="modalCatDescription"></p>
+            </div>
+        </div>
+    </div>
     <script src="app.js"></script>
 </body>
 </html>

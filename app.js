@@ -1,5 +1,28 @@
 const API_URL = "https://cat-api-maxingthesequel.vercel.app";
 
+// SCROLL TO CATS SECTION
+function scrollToCats() {
+    document.getElementById("catsSection").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// TOGGLE SHADOW ON STICKY SEARCH BAR ONCE THE HERO SCROLLS PAST IT
+function initStickySearchShadow() {
+    const sentinel = document.getElementById("stickySentinel");
+    const searchBar = document.getElementById("searchSticky");
+    if (!sentinel || !searchBar) return;
+
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            searchBar.classList.toggle("stuck", !entry.isIntersecting);
+        },
+        { threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+}
+
+initStickySearchShadow();
+
 
 // GET ALL CATS
 async function loadCats() {
@@ -45,14 +68,7 @@ async function viewCat(id) {
     try {
         const response = await fetch(`${API_URL}/cats/${id}`);
         const cat = await response.json();
-
-        alert(`
-            ${cat.name}
-            Breed: ${cat.breed}
-            Age: ${cat.age}
-            Color: ${cat.color}
-            Description: ${cat.description}
-        `);
+        openModal(cat);
     }
     catch (error) {
         console.error(error);
@@ -60,6 +76,66 @@ async function viewCat(id) {
     }
 
 }
+
+// OPEN MODAL
+function openModal(cat) {
+    document.getElementById("modalCatName").textContent = cat.name;
+    document.getElementById("modalCatBreed").textContent = cat.breed;
+    document.getElementById("modalCatDescription").textContent = cat.description;
+
+    const details = [
+        { label: "Age", value: cat.age ? `${cat.age} years old` : null },
+        { label: "Gender", value: cat.gender },
+        { label: "Color", value: cat.color },
+        { label: "Previous Owner", value: cat.prev_owner },
+        { label: "Favorite Treat", value: cat.fav_treat },
+        { label: "Likes", value: cat.likes },
+        { label: "Dislikes", value: cat.dislikes },
+        { label: "Health History", value: cat.previous_health_conditions },
+        { label: "Friendliness", value: cat.friendliness_level },
+        { label: "Preferred Environment", value: cat.prefered_environment || cat.preferred_environment },
+        { label: "Good for Adoption", value: cat.good_for_adoption },
+    ];
+    
+    document.getElementById("modalDetailGrid").innerHTML = details
+        .filter(item => item.value)
+        .map(item => `
+            <div class="detail-row">
+                <span class="detail-label">${item.label}</span>
+                <span class="detail-value">${item.value}</span>
+            </div>
+        `)
+        .join("");
+    const modal = document.getElementById("catModal");
+    modal.classList.remove("closing");
+    modal.classList.add("active");
+}
+
+//CLOSE MODAL
+function closeModal() {
+    const modal = document.getElementById("catModal");
+    modal.classList.remove("active");
+    modal.classList.add("closing");
+ 
+    // wait for the fade/slide-out animation to finish
+    setTimeout(() => {
+        modal.classList.remove("closing");
+    }, 350);
+}
+
+// CLOSE WHEN CLICKING OUTSIDE THE CARD
+function handleOverlayClick(event) {
+    if (event.target.id === "catModal") {
+        closeModal();
+    }
+}
+
+// CLOSE ON ESCAPE KEY
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+        closeModal();
+    }
+});
 
 // SEARCH
 async function searchCats() {
