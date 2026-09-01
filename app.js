@@ -80,8 +80,12 @@ async function viewCat(id) {
 // OPEN MODAL
 function openModal(cat) {
     const modalImage = document.getElementById("modalCatImage");
-    modalImage.src = cat.image || "https://placekitten.com/400/400";
+    modalImage.src = cat.image ? `${API_URL}${cat.image}` : "https://placekitten.com/400/400";
     modalImage.alt = cat.name;
+    modalImage.onerror = () => {
+        modalImage.onerror = null; // avoid an infinite loop if the fallback also fails
+        modalImage.src = "https://placekitten.com/400/400";
+    };
  
     document.getElementById("modalCatName").textContent = cat.name;
     document.getElementById("modalCatBreed").textContent = cat.breed;
