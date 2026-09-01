@@ -1,7 +1,5 @@
-from pathlib import Path
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
     title="Simple Cat API",
@@ -17,27 +15,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# SERVE FILES IN THE "images" FOLDER AT THE /images/... URL PATH
-# e.g. a file at images/whiskers.jpg becomes reachable at /images/whiskers.jpg
-#
-# - Path(__file__).parent builds an absolute path next to this file, since a
-#   serverless function's working directory isn't guaranteed to match the project root.
-# - check_dir=False stops the whole app from crashing on startup if the images
-#   folder doesn't exist yet — missing photos will just 404 individually instead.
-IMAGES_DIR = Path(__file__).resolve().parent / "images"
- 
-app.mount(
-    "/images",
-    StaticFiles(directory=str(IMAGES_DIR), check_dir=False),
-    name="images"
-)
-
 
 # CAT DATA
 cats = [
     {
         "id": 1,
         "name": "Whiskers",
+        "image": "/images/whiskers.jpg",
         "breed": "Maine Coon",
         "age": "3",
         "color": "Brown and White",
@@ -52,10 +36,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A large, friendly cat with a thick coat and full of sodium."
     },
-
+ 
     {
         "id": 2,
         "name": "Luna",
+        "image": "/images/luna.jpg",
         "breed": "Siamese",
         "age": "2",
         "color": "Cream and Brown",
@@ -70,10 +55,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A vocal and affectionate cat.(Will get political)"
     },
-
+ 
     {
         "id": 3,
         "name": "Simba",
+        "image": "/images/simba.jpg",
         "breed": "Russian Blue",
         "age": "3",
         "color": "Golden",
@@ -88,10 +74,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A majestic cat with a powerful presence and has a raging anger with slippers."
     },
-
+ 
     {
         "id": 4,
         "name": "Bacteria",
+        "image": "/images/bacteria.jpg",
         "breed": "Ragdoll",
         "age": "1",
         "color": "Brown and White",
@@ -106,10 +93,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A gentle and affectionate cat, will stab you in your sleep."
     },
-
+ 
     {
         "id": 5,
         "name": "Chromosome",
+        "image": "/images/chromosome.jpg",
         "breed": "Burmese",
         "age": "1",
         "color": "Brown, Black and White",
@@ -124,10 +112,11 @@ cats = [
         "good_for_adoption": "No",
         "description": "A playful and curious cat, will eat your food when you are not looking, including dino nuggies."
     },
-
+ 
     {
         "id": 6,
         "name": "Biggie Cheese",
+        "image": "/images/biggie-cheese.jpg",
         "breed": "American Longhair",
         "age": "1",
         "color": "Brown, Black and White",
@@ -142,10 +131,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A rather sleepy cat that mostly sleeps in his freetime or whatever time really. Will slap you if you disrupt his beauty sleep"
     },
-
+ 
     {
         "id": 7,
         "name": "Burmese Python",
+        "image": "/images/burmese-python.jpg",
         "breed": "Donskoy",
         "age": "2",
         "color": "Grey",
@@ -160,10 +150,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "This cat likes to be praised alot. I don't know why but just praise her and she'll love you. (Alot)"
     },
-
+ 
     {
         "id": 8,
         "name": "King",
+        "image": "/images/king.jpg",
         "breed": "Persian",
         "age": "1",
         "color": "White",
@@ -178,10 +169,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "He likes staring down at people at a high place for some reason."
     },
-
+ 
     {
         "id": 9,
         "name": "Larry",
+        "image": "/images/larry.jpg",
         "breed": "Persian",
         "age": "3",
         "color": "Grey",
@@ -196,10 +188,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "Larry."
     },
-
+ 
     {
         "id": 10,
         "name": "Evil Larry",
+        "image": "/images/evil-larry.jpg",
         "breed": "Scottish Fold",
         "age": "1",
         "color": "Orange",
@@ -214,10 +207,11 @@ cats = [
         "good_for_adoption": "No",
         "description": "Do not let her near Larry, at all cost."
     },
-
+ 
     {
         "id": 11,
         "name": "Irish",
+        "image": "/images/irish.jpg",
         "breed": "Siamese",
         "age": "1",
         "color": "Orange and white",
@@ -232,10 +226,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A very Irish cat, as Irish as you can get."
     },
-
+ 
     {
         "id": 12,
         "name": "Poppy",
+        "image": "/images/poppy.jpg",
         "breed": "Burmese",
         "age": "6",
         "gender": "Male",
@@ -251,10 +246,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "Likes to bite things, especially if it makes a crunching sound"
     },
-
+ 
     {
         "id": 13,
         "name": "Mort",
+        "image": "/images/mort.jpg",
         "breed": "Ragdoll",
         "age": "2",
         "color": "Black and White",
@@ -269,10 +265,11 @@ cats = [
         "good_for_adoption": "No",
         "description": "Please Be sure to hold him close when there is a thunderstorm"
     },
-
+ 
     {
         "id": 14,
         "name": "Wart",
+        "image": "/images/wart.jpg",
         "breed": "Chartreux",
         "age": "5",
         "color": "Grey",
@@ -287,10 +284,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "Loving and affectionate cat, She's perfect, almost too perfect..."
     },
-
+ 
     {
         "id": 15,
         "name": "Lexi",
+        "image": "/images/lexi.jpg",
         "breed": "LaPerm",
         "age": "6",
         "color": "Brown",
@@ -305,10 +303,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "Religously enjoyes the beaches and does not care if you get sand between her fur"
     },
-
+ 
     {
         "id": 16,
         "name": "Bob",
+        "image": "/images/bob.jpg",
         "breed": "Munchkin",
         "age": "1",
         "color": "Brown, Black and White",
@@ -323,10 +322,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A rescue cat that found, he seems awfully quite and shy but warms up to you eventually."
     },
-
+ 
     {
         "id": 17,
         "name": "Ratt",
+        "image": "/images/ratt.jpg",
         "breed": "Snowshoe",
         "age": "1",
         "color": "Brown and White",
@@ -341,10 +341,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "A rescue cat that's found near the park. Her love for cheesesticks though shows no bounds."
     },
-
+ 
     {
         "id": 18,
         "name": "Hercules",
+        "image": "/images/hercules.jpg",
         "breed": "Scottish Fold",
         "age": "1",
         "color": "Orange",
@@ -359,10 +360,11 @@ cats = [
         "good_for_adoption": "No",
         "description": "Very outdoorsy and like to sleep alot in the sun."
     },
-
+ 
     {
         "id": 19,
         "name": "Satan",
+        "image": "/images/satan.jpg",
         "breed": "Russian White, Black, and Tabby Cat",
         "age": "5",
         "color": "Calico",
@@ -377,10 +379,11 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "She's an odd one, but she's still lovable all the same. Just be sure to keep her fed."
     },
-
+ 
     {
         "id": 20,
         "name": "Terry",
+        "image": "/images/terry.jpg",
         "breed": "Dragon Li",
         "age": "2",
         "color": "Black and White",
@@ -395,7 +398,7 @@ cats = [
         "good_for_adoption": "Yes",
         "description": "Really enjoyes the restaurant scene, happily watching customers eat and great at pictures."
     },
-
+ 
 ]
         
 # HOME
