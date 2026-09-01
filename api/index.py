@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
     title="Simple Cat API",
@@ -14,6 +15,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# SERVE FILES IN THE "images" FOLDER AT THE /images/... URL PATH
+# e.g. a file at images/whiskers.jpg becomes reachable at /images/whiskers.jpg
+app.mount("/images", StaticFiles(directory="images"), name="images")
+
 
 # CAT DATA
 cats = [
