@@ -1,3 +1,4 @@
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -18,7 +19,18 @@ app.add_middleware(
 
 # SERVE FILES IN THE "images" FOLDER AT THE /images/... URL PATH
 # e.g. a file at images/whiskers.jpg becomes reachable at /images/whiskers.jpg
-app.mount("/images", StaticFiles(directory="images"), name="images")
+#
+# - Path(__file__).parent builds an absolute path next to this file, since a
+#   serverless function's working directory isn't guaranteed to match the project root.
+# - check_dir=False stops the whole app from crashing on startup if the images
+#   folder doesn't exist yet — missing photos will just 404 individually instead.
+IMAGES_DIR = Path(__file__).resolve().parent / "images"
+ 
+app.mount(
+    "/images",
+    StaticFiles(directory=str(IMAGES_DIR), check_dir=False),
+    name="images"
+)
 
 
 # CAT DATA
