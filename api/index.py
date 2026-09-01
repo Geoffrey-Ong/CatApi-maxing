@@ -23,7 +23,6 @@ app.mount("/images", StaticFiles(directory="images"), name="images")
 
 # CAT DATA
 cats = [
-
     {
         "id": 1,
         "name": "Whiskers",

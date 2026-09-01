@@ -79,6 +79,10 @@ async function viewCat(id) {
 
 // OPEN MODAL
 function openModal(cat) {
+    const modalImage = document.getElementById("modalCatImage");
+    modalImage.src = cat.image || "https://placekitten.com/400/400";
+    modalImage.alt = cat.name;
+ 
     document.getElementById("modalCatName").textContent = cat.name;
     document.getElementById("modalCatBreed").textContent = cat.breed;
     document.getElementById("modalCatDescription").textContent = cat.description;
