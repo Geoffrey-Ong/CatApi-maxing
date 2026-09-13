@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Header, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+from pydantic import BaseModel, Field
+from typing import Optional, Literal 
 
 API_KEY = "student-api-key-6767"
 API_VERSION = "1.0"
@@ -20,6 +22,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#DATA MODEL
+class Cat(BaseModel):
+    id: int
+    name: str = Field(min_length=1)
+    image: str = Field(min_length=1)
+    breed: str = Field(min_length=1)
+    age: int = Field(gt=0)
+    color: str = Field(min_length=1)
+    gender: str = Field(min_length=1)
+    prev_owner: str = Field(min_length=1)
+    fav_treat: str = Field(min_length=1)
+    likes: str 
+    dislikes: str 
+    previous_health_conditions: str = Field(min_length=1)
+    friendliness_level: int = Field(ge=1, le=5)
+    prefered_environment: str = Field(min_length=1)
+    good_for_adoption: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
 # CAT DATA
 cats = [
     {
@@ -35,7 +56,7 @@ cats = [
         "likes": "Long walks at the beach",
         "dislikes": "Loud noises",
         "previous_health_conditions": "None",
-        "friendliness_level": "5",
+        "friendliness_level": 5,
         "prefered_environment": "Outside and Inside",
         "good_for_adoption": "Yes",
         "description": "A large, friendly cat with a thick coat and full of sodium."
@@ -46,7 +67,7 @@ cats = [
         "name": "Luna",
         "image": "/images/luna.jpg",
         "breed": "Siamese",
-        "age": "2",
+        "age": 2,
         "color": "Cream and Brown",
         "gender": "Female",
         "prev_owner": "Lexter Launion",
@@ -54,7 +75,7 @@ cats = [
         "likes": "Playing with yarn balls",
         "dislikes": "Abadonment",
         "previous_health_conditions": "None",
-        "friendliness_level": "4",
+        "friendliness_level": 4,
         "prefered_environment": "Inside Only",
         "good_for_adoption": "Yes",
         "description": "A vocal and affectionate cat.(Will get political)"
@@ -65,7 +86,7 @@ cats = [
         "name": "Simba",
         "image": "/images/simba.jpg",
         "breed": "Russian Blue",
-        "age": "3",
+        "age": 3,
         "color": "Golden",
         "gender": "Male",
         "prev_owner": "Orie Mano",
@@ -73,7 +94,7 @@ cats = [
         "likes": "Alone time",
         "dislikes": "Slippers",
         "previous_health_conditions": "Fleas",
-        "friendliness_level": "2",
+        "friendliness_level": 2,
         "prefered_environment": "Inside Only",
         "good_for_adoption": "Yes",
         "description": "A majestic cat with a powerful presence and has a raging anger with slippers."
@@ -84,7 +105,7 @@ cats = [
         "name": "Bacteria",
         "image": "/images/bacteria.jpg",
         "breed": "Ragdoll",
-        "age": "1",
+        "age": 1,
         "color": "Brown and White",
         "gender": "Male",
         "prev_owner": "Wambi Erie",
@@ -92,7 +113,7 @@ cats = [
         "likes": "Sleeping",
         "dislikes": "Markiplier",
         "previous_health_conditions": "Diabetes",
-        "friendliness_level": "5",
+        "friendliness_level": 5,
         "prefered_environment": "Inside Only",
         "good_for_adoption": "Yes",
         "description": "A gentle and affectionate cat, will stab you in your sleep."
@@ -103,7 +124,7 @@ cats = [
         "name": "Chromosome",
         "image": "/images/chromosome.jpg",
         "breed": "Burmese",
-        "age": "1",
+        "age": 1,
         "color": "Brown, Black and White",
         "gender": "Male",
         "prev_owner": "Anonymous",
@@ -111,7 +132,7 @@ cats = [
         "likes": "Eating",
         "dislikes": "Not being given treats",
         "previous_health_conditions": "Obesity",
-        "friendliness_level": "5",
+        "friendliness_level": 5,
         "prefered_environment": "Inside Only",
         "good_for_adoption": "No",
         "description": "A playful and curious cat, will eat your food when you are not looking, including dino nuggies."
@@ -122,7 +143,7 @@ cats = [
         "name": "Biggie Cheese",
         "image": "/images/biggie-cheese.jpg",
         "breed": "American Longhair",
-        "age": "1",
+        "age": 1,
         "color": "Brown, Black and White",
         "gender": "Female",
         "prev_owner": "Ryan Salmo",
@@ -130,7 +151,7 @@ cats = [
         "likes": "Sleeping 17 hours",
         "dislikes": "Disruption of said sleep",
         "previous_health_conditions": "None",
-        "friendliness_level": "3",
+        "friendliness_level": 3,
         "prefered_environment": "Inside Only",
         "good_for_adoption": "Yes",
         "description": "A rather sleepy cat that mostly sleeps in his freetime or whatever time really. Will slap you if you disrupt his beauty sleep"
@@ -141,7 +162,7 @@ cats = [
         "name": "Burmese Python",
         "image": "/images/burmese-python.jpg",
         "breed": "Donskoy",
-        "age": "2",
+        "age": 2,
         "color": "Grey",
         "gender": "Female",
         "prev_owner": "Anonymous", 
@@ -149,7 +170,7 @@ cats = [
         "likes": "Bathing in the Sun",
         "dislikes": "Showers",
         "previous_health_conditions": "None",
-        "friendliness_level": "5", 
+        "friendliness_level": 5, 
         "prefered_environment": "Outside and Inside",
         "good_for_adoption": "Yes",
         "description": "This cat likes to be praised alot. I don't know why but just praise her and she'll love you. (Alot)"
@@ -160,7 +181,7 @@ cats = [
         "name": "King",
         "image": "/images/king.jpg",
         "breed": "Persian",
-        "age": "1",
+        "age": 1,
         "color": "White",
         "gender": "Male",
         "prev_owner": "Leon Kennedy", 
@@ -168,7 +189,7 @@ cats = [
         "likes": "Sitting on a big chair",
         "dislikes": "Being yelled at",
         "previous_health_conditions": "None",
-        "friendliness_level": "2", 
+        "friendliness_level": 2, 
         "prefered_environment": "Outside and Inside",
         "good_for_adoption": "Yes",
         "description": "He likes staring down at people at a high place for some reason."
@@ -179,7 +200,7 @@ cats = [
         "name": "Larry",
         "image": "/images/larry.jpg",
         "breed": "Persian",
-        "age": "3",
+        "age": 3,
         "color": "Grey",
         "gender": "Male",
         "prev_owner": "Anonymous", 
@@ -187,7 +208,7 @@ cats = [
         "likes": "Cheese",
         "dislikes": "Anything but cheese",
         "previous_health_conditions": "None",
-        "friendliness_level": "5", 
+        "friendliness_level": 5, 
         "prefered_environment": "Inside Only",
         "good_for_adoption": "Yes",
         "description": "Larry."
@@ -198,7 +219,7 @@ cats = [
         "name": "Evil Larry",
         "image": "/images/evil-larry.jpg",
         "breed": "Scottish Fold",
-        "age": "1",
+        "age": 1,
         "color": "Orange",
         "gender": "Female",
         "prev_owner": "Anonymous", 
@@ -206,7 +227,7 @@ cats = [
         "likes": "Everything but Larry",
         "dislikes": "Larry",
         "previous_health_conditions": "None",
-        "friendliness_level": "1", 
+        "friendliness_level": 1, 
         "prefered_environment": "Inside Only",
         "good_for_adoption": "No",
         "description": "Do not let her near Larry, at all cost."
@@ -217,7 +238,7 @@ cats = [
         "name": "Irish",
         "image": "/images/irish.jpg",
         "breed": "Siamese",
-        "age": "1",
+        "age": 1,
         "color": "Orange and white",
         "gender": "Female",
         "prev_owner": "Anonymous", 
@@ -225,7 +246,7 @@ cats = [
         "likes": "Park Walks",
         "dislikes": "Showers",
         "previous_health_conditions": "Arthritis",
-        "friendliness_level": "4", 
+        "friendliness_level": 4, 
         "prefered_environment": "Outside Only",
         "good_for_adoption": "Yes",
         "description": "A very Irish cat, as Irish as you can get."
@@ -236,7 +257,7 @@ cats = [
         "name": "Poppy",
         "image": "/images/poppy.jpg",
         "breed": "Burmese",
-        "age": "6",
+        "age": 6,
         "gender": "Male",
         "color": "Brown, Black and White",
         "gender": "Male",
@@ -245,7 +266,7 @@ cats = [
         "likes": "The plant on the coffee table",
         "dislikes": "Loud noises",
         "previous_health_conditions": "None",
-        "friendliness_level": "4", 
+        "friendliness_level": 4, 
         "prefered_environment": "Outside Only",
         "good_for_adoption": "Yes",
         "description": "Likes to bite things, especially if it makes a crunching sound"
@@ -256,7 +277,7 @@ cats = [
         "name": "Mort",
         "image": "/images/mort.jpg",
         "breed": "Ragdoll",
-        "age": "2",
+        "age": 2,
         "color": "Black and White",
         "gender": "Female",
         "prev_owner": "Anonymous", 
@@ -264,7 +285,7 @@ cats = [
         "likes": "Rooftop",
         "dislikes": "Thunderstorms",
         "previous_health_conditions": "Diabetes",
-        "friendliness_level": "5", 
+        "friendliness_level": 5, 
         "prefered_environment": "Inside Only",
         "good_for_adoption": "No",
         "description": "Please Be sure to hold him close when there is a thunderstorm"
@@ -275,7 +296,7 @@ cats = [
         "name": "Wart",
         "image": "/images/wart.jpg",
         "breed": "Chartreux",
-        "age": "5",
+        "age": 5,
         "color": "Grey",
         "gender": "Female",
         "prev_owner": "Sean Gono", 
@@ -283,7 +304,7 @@ cats = [
         "likes": "Treated with love and care",
         "dislikes": "Being left alone",
         "previous_health_conditions": "None",
-        "friendliness_level": "5", 
+        "friendliness_level": 5, 
         "prefered_environment": "Inside Only",
         "good_for_adoption": "Yes",
         "description": "Loving and affectionate cat, She's perfect, almost too perfect..."
@@ -294,7 +315,7 @@ cats = [
         "name": "Lexi",
         "image": "/images/lexi.jpg",
         "breed": "LaPerm",
-        "age": "6",
+        "age": 6,
         "color": "Brown",
         "gender": "Male",
         "prev_owner": "Anonymous", 
@@ -302,7 +323,7 @@ cats = [
         "likes": "Beaches",
         "dislikes": "Getting picked up",
         "previous_health_conditions": "Gingivitis",
-        "friendliness_level": "2", 
+        "friendliness_level": 2, 
         "prefered_environment": "Outside and Inside",
         "good_for_adoption": "Yes",
         "description": "Religously enjoyes the beaches and does not care if you get sand between her fur"
@@ -313,7 +334,7 @@ cats = [
         "name": "Bob",
         "image": "/images/bob.jpg",
         "breed": "Munchkin",
-        "age": "1",
+        "age": 1,
         "color": "Brown, Black and White",
         "gender": "Male",
         "prev_owner": "Anonymous", 
@@ -321,7 +342,7 @@ cats = [
         "likes": "Ear scratches",
         "dislikes": "Belly rubs",
         "previous_health_conditions": "None",
-        "friendliness_level": "3", 
+        "friendliness_level": 3, 
         "prefered_environment": "Outside and Inside",
         "good_for_adoption": "Yes",
         "description": "A rescue cat that found, he seems awfully quite and shy but warms up to you eventually."
@@ -332,7 +353,7 @@ cats = [
         "name": "Ratt",
         "image": "/images/ratt.jpg",
         "breed": "Snowshoe",
-        "age": "1",
+        "age": 1,
         "color": "Brown and White",
         "gender": "Female",
         "prev_owner": "Melissa", 
@@ -340,7 +361,7 @@ cats = [
         "likes": "Not being bullied",
         "dislikes": "Being bullied",
         "previous_health_conditions": "Fleas",
-        "friendliness_level": "4", 
+        "friendliness_level": 4, 
         "prefered_environment": "Outside and Inside",
         "good_for_adoption": "Yes",
         "description": "A rescue cat that's found near the park. Her love for cheesesticks though shows no bounds."
@@ -351,7 +372,7 @@ cats = [
         "name": "Hercules",
         "image": "/images/hercules.jpg",
         "breed": "Scottish Fold",
-        "age": "1",
+        "age": 1,
         "color": "Orange",
         "gender": "Female",
         "prev_owner": "Roxy Hudson", 
@@ -359,7 +380,7 @@ cats = [
         "likes": "Sun-Bathing",
         "dislikes": "Rainy days",
         "previous_health_conditions": "None",
-        "friendliness_level": "5", 
+        "friendliness_level": 5, 
         "prefered_environment": "Outside only",
         "good_for_adoption": "No",
         "description": "Very outdoorsy and like to sleep alot in the sun."
@@ -370,7 +391,7 @@ cats = [
         "name": "Satan",
         "image": "/images/satan.jpg",
         "breed": "Russian White, Black, and Tabby Cat",
-        "age": "5",
+        "age": 5,
         "color": "Calico",
         "gender": "Female",
         "prev_owner": "Anonymous", 
@@ -378,7 +399,7 @@ cats = [
         "likes": "Watching people sleep",
         "dislikes": "The voices",
         "previous_health_conditions": "None",
-        "friendliness_level": "5", 
+        "friendliness_level": 5, 
         "prefered_environment": "Inside only",
         "good_for_adoption": "Yes",
         "description": "She's an odd one, but she's still lovable all the same. Just be sure to keep her fed."
@@ -389,7 +410,7 @@ cats = [
         "name": "Terry",
         "image": "/images/terry.jpg",
         "breed": "Dragon Li",
-        "age": "2",
+        "age": 2,
         "color": "Black and White",
         "gender": "Female",
         "prev_owner": "Chen", 
@@ -397,14 +418,26 @@ cats = [
         "likes": "Sleeping",
         "dislikes": "Being surprised",
         "previous_health_conditions": "None",
-        "friendliness_level": "2", 
+        "friendliness_level": 2, 
         "prefered_environment": "Outside and Inside",
         "good_for_adoption": "Yes",
         "description": "Really enjoyes the restaurant scene, happily watching customers eat and great at pictures."
     },
  
 ]
-        
+
+#VALIDATION
+validated_cats = [Cat(**cat).model_dump() for cat in cats]
+cats = validated_cats
+
+def verify_api_key(x_api_key: Optional[str] = Header(default=None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key."
+        )
+    return True
+
 # HOME
 @app.get("/")
 def home():
