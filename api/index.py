@@ -454,9 +454,9 @@ def home():
     return {
         "message": "Welcome to the Simple Cat API!",
         "endpoints": [
-            "/api/v1/cats",
-            "/api/v1/cats/{id}",
-            "/api/v1/cats/search"
+            "/cats",
+            "/cats/{id}",
+            "/cats/search"
         ]
     }
 
@@ -481,6 +481,7 @@ def search_cats( q: str = Query(..., min_length=1)):
             f"{cat['color']}"
             f"{cat['gender']}"
             f"{cat['breed']}"
+            f"{cat['preferred_environment']}"
         ).lower()
 
         if q in searchable_text:
