@@ -1,10 +1,15 @@
-from fastapi import FastAPI, HTTPException, Header, Query
+from fastapi import FastAPI, HTTPException, Header, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
+
+API_KEY = "student-api-key-6767"
+API_VERSION = "1.0"
+
 
 app = FastAPI(
     title="Simple Cat API",
     description="A beginner-friendly REST API containing information about cats.",
-    version="1.0.0"
+    version=API_VERSION
 )
 
 app.add_middleware(
@@ -15,7 +20,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # CAT DATA
 cats = [
     {
@@ -23,7 +27,7 @@ cats = [
         "name": "Whiskers",
         "image": "/images/whiskers.jpg",
         "breed": "Maine Coon",
-        "age": "3",
+        "age": 3,
         "color": "Brown and White",
         "gender": "Male",
         "prev_owner": "Terry Cruz",
