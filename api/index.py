@@ -438,31 +438,39 @@ def verify_api_key(x_api_key: Optional[str] = Header(default=None)):
         )
     return True
 
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok",
+        "service": "Simple Cat API",
+        "version": API_VERSION,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
 # HOME
-@app.get("/")
+@app.get("/api/v1", dependencies=[Depends(verify_api_key)])
 def home():
 
     return {
         "message": "Welcome to the Simple Cat API!",
         "endpoints": [
-            "/cats",
-            "/cats/{id}",
-            "/cats/search"
+            "/api/v1/cats",
+            "/api/v1/cats/{id}",
+            "/api/v1/cats/search"
         ]
     }
 
 
 # GET ALL CATS
-@app.get("/cats")
+@app.get("/api/v1/cats", dependencies=[Depends(verify_api_key)])
 def get_cats():
-
     return {
         "count": len(cats),
         "cats": cats
     }
 
 # SEARCH CATS
-@app.get("/cats/search")
+@app.get("/api/v1/cats/search", dependencies=[Depends(verify_api_key)])
 def search_cats( q: str = Query(..., min_length=1)):
     q = q.lower()
     results = []
@@ -486,14 +494,11 @@ def search_cats( q: str = Query(..., min_length=1)):
 
 
 # GET ONE CAT
-@app.get("/cats/{cat_id}")
+@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(verify_api_key)])
 def get_cat(cat_id: int):
-
     for cat in cats:
-
         if cat["id"] == cat_id:
             return cat
-
     raise HTTPException(
         status_code=404,
         detail="Cat not found."
