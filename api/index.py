@@ -11,7 +11,7 @@ API_VERSION = "1.0"
 app = FastAPI(
     title="Simple Cat API",
     description="A beginner-friendly REST API containing information about cats.",
-    version=API_VERSION
+    version= API_VERSION
 )
 
 app.add_middleware(
@@ -450,7 +450,6 @@ def health_check():
 # HOME
 @app.get("/api/v1", dependencies=[Depends(verify_api_key)])
 def home():
-
     return {
         "message": "Welcome to the Simple Cat API!",
         "endpoints": [
@@ -481,7 +480,7 @@ def search_cats( q: str = Query(..., min_length=1)):
             f"{cat['color']}"
             f"{cat['gender']}"
             f"{cat['breed']}"
-            f"{cat['preferred_environment']}"
+            f"{cat['prefered_environment']}"
         ).lower()
 
         if q in searchable_text:

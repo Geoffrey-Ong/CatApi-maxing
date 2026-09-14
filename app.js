@@ -1,4 +1,4 @@
-const API_URL = "https://cat-api-maxingthesequel.vercel.app";
+const API_URL = "https://cat-api-maxingthesequel.vercel.app/api/v1";
 const API_KEY = "student-api-key-6767"
 
 const FETCH_OPTIONS = {
