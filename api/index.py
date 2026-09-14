@@ -37,7 +37,7 @@ class Cat(BaseModel):
     dislikes: str 
     previous_health_conditions: str = Field(min_length=1)
     friendliness_level: int = Field(ge=1, le=5)
-    prefered_environment: str = Field(min_length=1)
+    prefered_environment: str = Literal["Inside Only", "Outside Only", "Outside and Inside"]
     good_for_adoption: str = Field(min_length=1)
     description: str = Field(min_length=1)
 
