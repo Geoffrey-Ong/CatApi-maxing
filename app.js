@@ -32,7 +32,8 @@ initStickySearchShadow();
 // GET ALL CATS
 async function loadCats() {
     try {
-        const response = await fetch(`${API_URL}/cats`);
+        const response = await fetch(`${API_URL}/cats`, FETCH_OPTIONS);
+        if (!response.ok) throw new Error("API request failed.");
         const data = await response.json();
         displayCats(data.cats);
     }
@@ -71,7 +72,8 @@ function displayCats(cats) {
 async function viewCat(id) {
 
     try {
-        const response = await fetch(`${API_URL}/cats/${id}`);
+        const response = await fetch(`${API_URL}/cats/${id}`, FETCH_OPTIONS);
+        if (!response.ok) throw new Error("API request failed.");
         const cat = await response.json();
         openModal(cat);
     }
@@ -160,7 +162,8 @@ async function searchCats() {
     }
     try {
         const response =
-            await fetch(`${API_URL}/cats/search?q=${encodeURIComponent(query)}`);
+            await fetch(`${API_URL}/cats/search?q=${encodeURIComponent(query)}`, FETCH_OPTIONS);
+        if (!response.ok) throw new Error("API request failed.");
         const data = await response.json();
         displayCats(data.results);
     }
