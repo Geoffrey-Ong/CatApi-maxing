@@ -46,7 +46,7 @@ cats = [
     {
         "id": 1,
         "name": "Whiskers",
-        "image": "/images/whiskers.jpg",
+        "image": "images/whiskers.jpg",
         "breed": "Maine Coon",
         "age": 3,
         "color": "Brown and White",
@@ -65,7 +65,7 @@ cats = [
     {
         "id": 2,
         "name": "Luna",
-        "image": "/images/luna.jpg",
+        "image": "images/luna.jpg",
         "breed": "Siamese",
         "age": 2,
         "color": "Cream and Brown",
@@ -84,7 +84,7 @@ cats = [
     {
         "id": 3,
         "name": "Simba",
-        "image": "/images/simba.jpg",
+        "image": "images/simba.jpg",
         "breed": "Russian Blue",
         "age": 3,
         "color": "Golden",
@@ -103,7 +103,7 @@ cats = [
     {
         "id": 4,
         "name": "Bacteria",
-        "image": "/images/bacteria.jpg",
+        "image": "images/bacteria.jpg",
         "breed": "Ragdoll",
         "age": 1,
         "color": "Brown and White",
@@ -122,7 +122,7 @@ cats = [
     {
         "id": 5,
         "name": "Chromosome",
-        "image": "/images/chromosome.jpg",
+        "image": "images/chromosome.jpg",
         "breed": "Burmese",
         "age": 1,
         "color": "Brown, Black and White",
@@ -141,7 +141,7 @@ cats = [
     {
         "id": 6,
         "name": "Biggie Cheese",
-        "image": "/images/biggie-cheese.jpg",
+        "image": "images/biggie-cheese.jpg",
         "breed": "American Longhair",
         "age": 1,
         "color": "Brown, Black and White",
@@ -160,7 +160,7 @@ cats = [
     {
         "id": 7,
         "name": "Burmese Python",
-        "image": "/images/burmese-python.jpg",
+        "image": "images/burmese-python.jpg",
         "breed": "Donskoy",
         "age": 2,
         "color": "Grey",
@@ -179,7 +179,7 @@ cats = [
     {
         "id": 8,
         "name": "King",
-        "image": "/images/king.jpg",
+        "image": "images/king.jpg",
         "breed": "Persian",
         "age": 1,
         "color": "White",
@@ -198,7 +198,7 @@ cats = [
     {
         "id": 9,
         "name": "Larry",
-        "image": "/images/larry.jpg",
+        "image": "images/larry.jpg",
         "breed": "Persian",
         "age": 3,
         "color": "Grey",
@@ -217,7 +217,7 @@ cats = [
     {
         "id": 10,
         "name": "Evil Larry",
-        "image": "/images/evil-larry.jpg",
+        "image": "images/evil-larry.jpg",
         "breed": "Scottish Fold",
         "age": 1,
         "color": "Orange",
@@ -236,7 +236,7 @@ cats = [
     {
         "id": 11,
         "name": "Irish",
-        "image": "/images/irish.jpg",
+        "image": "images/irish.jpg",
         "breed": "Siamese",
         "age": 1,
         "color": "Orange and white",
@@ -255,7 +255,7 @@ cats = [
     {
         "id": 12,
         "name": "Poppy",
-        "image": "/images/poppy.jpg",
+        "image": "images/poppy.jpg",
         "breed": "Burmese",
         "age": 6,
         "gender": "Male",
@@ -275,7 +275,7 @@ cats = [
     {
         "id": 13,
         "name": "Mort",
-        "image": "/images/mort.jpg",
+        "image": "images/mort.jpg",
         "breed": "Ragdoll",
         "age": 2,
         "color": "Black and White",
@@ -294,7 +294,7 @@ cats = [
     {
         "id": 14,
         "name": "Wart",
-        "image": "/images/wart.jpg",
+        "image": "images/wart.jpg",
         "breed": "Chartreux",
         "age": 5,
         "color": "Grey",
@@ -313,7 +313,7 @@ cats = [
     {
         "id": 15,
         "name": "Lexi",
-        "image": "/images/lexi.jpg",
+        "image": "images/lexi.jpg",
         "breed": "LaPerm",
         "age": 6,
         "color": "Brown",
@@ -332,7 +332,7 @@ cats = [
     {
         "id": 16,
         "name": "Bob",
-        "image": "/images/bob.jpg",
+        "image": "images/bob.jpg",
         "breed": "Munchkin",
         "age": 1,
         "color": "Brown, Black and White",
@@ -351,7 +351,7 @@ cats = [
     {
         "id": 17,
         "name": "Ratt",
-        "image": "/images/ratt.jpg",
+        "image": "images/ratt.jpg",
         "breed": "Snowshoe",
         "age": 1,
         "color": "Brown and White",
@@ -370,7 +370,7 @@ cats = [
     {
         "id": 18,
         "name": "Hercules",
-        "image": "/images/hercules.jpg",
+        "image": "images/hercules.jpg",
         "breed": "Scottish Fold",
         "age": 1,
         "color": "Orange",
@@ -389,7 +389,7 @@ cats = [
     {
         "id": 19,
         "name": "Satan",
-        "image": "/images/satan.jpg",
+        "image": "images/satan.jpg",
         "breed": "Russian White, Black, and Tabby Cat",
         "age": 5,
         "color": "Calico",
@@ -408,7 +408,7 @@ cats = [
     {
         "id": 20,
         "name": "Terry",
-        "image": "/images/terry.jpg",
+        "image": "images/terry.jpg",
         "breed": "Dragon Li",
         "age": 2,
         "color": "Black and White",
@@ -470,13 +470,13 @@ def get_cats():
 
 # SEARCH CATS
 @app.get("/api/v1/cats/search", dependencies=[Depends(verify_api_key)])
-def search_cats( q: str = Query(..., min_length=1)):
+def search_cats(q: str = Query(..., min_length=1)):
     q = q.lower()
     results = []
     for cat in cats:
         searchable_text = (
-            f"{cat['name']} "
-            f"{cat['breed']} "
+            f"{cat['name']}"
+            f"{cat['breed']}"
             f"{cat['color']}"
             f"{cat['gender']}"
             f"{cat['breed']}"
