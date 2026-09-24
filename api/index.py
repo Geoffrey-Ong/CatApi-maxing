@@ -4,7 +4,16 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import Optional, Literal 
 
-API_KEY = "student-api-key-6767"
+# Each frontend gets its own key. The value is that key's "scope" — which
+# routes it's allowed to call (see require_scope below). Both frontends
+# currently read the same cat data, so both scopes are accepted on the
+# existing routes; a future battle-only route (submitting a move, starting
+# a match, etc.) can be locked to just "battle" by passing require_scope("battle").
+API_KEYS = {
+    "adoption-api-key-9770": "adoption",                # Cat Adoption 
+    "catTCGcollection-api-key-6767": "collection",      # Cat TCG Home / Collection frontend
+    "catTCGbattle-api-key-4242": "battle",              # Cat TCG Battle Owners frontend
+}
 API_VERSION = "1.0"
 
 
@@ -431,12 +440,25 @@ validated_cats = [Cat(**cat).model_dump() for cat in cats]
 cats = validated_cats
 
 def verify_api_key(x_api_key: Optional[str] = Header(default=None)):
-    if x_api_key != API_KEY:
+    scope = API_KEYS.get(x_api_key)
+    if scope is None:
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key."
         )
-    return True
+    return scope
+
+# Use as Depends(require_scope("collection")), Depends(require_scope("battle")),
+# or Depends(require_scope("collection", "battle")) to accept either key.
+def require_scope(*allowed_scopes: str):
+    def dependency(scope: str = Depends(verify_api_key)):
+        if scope not in allowed_scopes:
+            raise HTTPException(
+                status_code=403,
+                detail="This API key isn't authorized for this endpoint."
+            )
+        return scope
+    return dependency
 
 @app.get("/health")
 def health_check():
@@ -448,7 +470,7 @@ def health_check():
     }
 
 # HOME
-@app.get("/api/v1", dependencies=[Depends(verify_api_key)])
+@app.get("/api/v1", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def home():
     return {
         "message": "Welcome to the Simple Cat API!",
@@ -461,7 +483,7 @@ def home():
 
 
 # GET ALL CATS
-@app.get("/api/v1/cats", dependencies=[Depends(verify_api_key)])
+@app.get("/api/v1/cats", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def get_cats():
     return {
         "count": len(cats),
@@ -469,7 +491,7 @@ def get_cats():
     }
 
 # SEARCH CATS
-@app.get("/api/v1/cats/search", dependencies=[Depends(verify_api_key)])
+@app.get("/api/v1/cats/search", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def search_cats(q: str = Query(..., min_length=1)):
     q = q.lower()
     results = []
@@ -494,7 +516,7 @@ def search_cats(q: str = Query(..., min_length=1)):
 
 
 # GET ONE CAT
-@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(verify_api_key)])
+@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def get_cat(cat_id: int):
     for cat in cats:
         if cat["id"] == cat_id:
@@ -503,5 +525,3 @@ def get_cat(cat_id: int):
         status_code=404,
         detail="Cat not found."
     )
-
-

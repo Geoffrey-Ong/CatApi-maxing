@@ -1,5 +1,5 @@
 const API_URL = "https://cat-api-maxingthesequel.vercel.app/api/v1";
-const API_KEY = "student-api-key-6767"
+const API_KEY = "adoption-api-key-9770";
 
 const FETCH_OPTIONS = {
     headers: { "x-api-key": API_KEY }
