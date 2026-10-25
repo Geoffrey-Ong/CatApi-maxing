@@ -1,8 +1,8 @@
 import os
 import psycopg
+from api.index import cats
 from dotenv import load_dotenv
 
-from index import cats   # your existing list, already validated by your Cat model
 
 load_dotenv()
 
