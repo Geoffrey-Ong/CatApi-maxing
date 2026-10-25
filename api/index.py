@@ -60,7 +60,7 @@ app.add_middleware(
 )
 
 def get_conn():
-    return psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+    return psycopg.connect(os.environ["Neondatabase"], row_factory=dict_row)
 
 #DATA MODEL
 class Cat(BaseModel): 
