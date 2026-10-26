@@ -18,7 +18,8 @@ load_dotenv()   # reads .env when running locally; on Vercel the real env var is
 API_KEYS = {
     "adoption-api-key-9770": "adoption",                # Cat Adoption 
     "catTCGcollection-api-key-6767": "collection",      # Cat TCG Home / Collection frontend
-    "catTCGbattle-api-key-4242": "battle",              # Cat TCG Battle Owners frontend
+    "catTCGbattle-api-key-4242": "battle",
+    "catquiz-api-key-6969": "quiz",              # Cat TCG Battle Owners frontend
 }
 
 # Browser origins each scope may call from (scheme + host + port, no trailing
@@ -45,7 +46,7 @@ SCOPE_ORIGINS = {
 # (CAT_API_BUILD_KEY), never in frontend code.
 BUILD_KEY = os.environ.get("CAT_API_BUILD_KEY")
 
-ALL_SCOPES = ("adoption", "collection", "battle", "build")
+ALL_SCOPES = ("adoption", "collection", "battle", "build", "quiz")
 API_VERSION = "1.0"
 
 
