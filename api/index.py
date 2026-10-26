@@ -29,14 +29,14 @@ SCOPE_ORIGINS = {
     "collection": {
         "https://cat-tcg-collection.vercel.app",
         "http://localhost:8000",
-        "http://127.0.0.1:5501",
-        "http://localhost:5501",
+        "http://127.0.0.1:5502",
+        "http://localhost:5502",
     },
     "battle": {
         "https://cat-tcg-battle.vercel.app",
         "http://localhost:8001",
-        "http://127.0.0.1:5501",
-        "http://localhost:5501",
+        "http://127.0.0.1:5502",
+        "http://localhost:5502",
     },
 }
 
