@@ -1,14 +1,8 @@
-import os
-import psycopg
-from fastapi import FastAPI, HTTPException, Header, Query, Depends, Request
+from fastapi import FastAPI, HTTPException, Header, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
-from psycopg.rows import dict_row
-from dotenv import load_dotenv
-
-load_dotenv()   # reads .env when running locally; on Vercel the real env var is used
+from typing import Optional, Literal 
 
 # Each frontend gets its own key. The value is that key's "scope" — which
 # routes it's allowed to call (see require_scope below). Both frontends
@@ -18,35 +12,8 @@ load_dotenv()   # reads .env when running locally; on Vercel the real env var is
 API_KEYS = {
     "adoption-api-key-9770": "adoption",                # Cat Adoption 
     "catTCGcollection-api-key-6767": "collection",      # Cat TCG Home / Collection frontend
-    "catTCGbattle-api-key-4242": "battle",
-    "catquiz-api-key-6969": "quiz",              # Cat TCG Battle Owners frontend
+    "catTCGbattle-api-key-4242": "battle",              # Cat TCG Battle Owners frontend
 }
-
-# Browser origins each scope may call from (scheme + host + port, no trailing
-# slash). Browsers set the Origin header themselves and page JavaScript can't
-# change it, so a key used from the wrong site is rejected. A scope that isn't
-# listed here (adoption) has no origin restriction.
-SCOPE_ORIGINS = {
-    "collection": {
-        "https://cat-tcg-collection.vercel.app",
-        "http://localhost:8000",
-        "http://127.0.0.1:5502",
-        "http://localhost:5502",
-    },
-    "battle": {
-        "https://cat-tcg-battle.vercel.app",
-        "http://localhost:8001",
-        "http://127.0.0.1:5502",
-        "http://localhost:5502",
-    },
-}
-
-# Optional key for server-side callers with no browser Origin, like the
-# frontends' build-time cache refresh. Keep it in an environment variable
-# (CAT_API_BUILD_KEY), never in frontend code.
-BUILD_KEY = os.environ.get("CAT_API_BUILD_KEY")
-
-ALL_SCOPES = ("adoption", "collection", "battle", "build", "quiz")
 API_VERSION = "1.0"
 
 
@@ -64,11 +31,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_conn():
-    return psycopg.connect(os.environ["Neondatabase"], row_factory=dict_row)
-
 #DATA MODEL
-class Cat(BaseModel): 
+class Cat(BaseModel):
     id: int
     name: str = Field(min_length=1)
     image: str = Field(min_length=1)
@@ -82,27 +46,405 @@ class Cat(BaseModel):
     dislikes: str 
     previous_health_conditions: str = Field(min_length=1)
     friendliness_level: int = Field(ge=1, le=5)
-    prefered_environment: Literal["Inside Only", "Outside Only", "Outside and Inside"]
+    prefered_environment: str = Literal["Inside Only", "Outside Only", "Outside and Inside"]
     good_for_adoption: str = Field(min_length=1)
     description: str = Field(min_length=1)
 
+# CAT DATA
+cats = [
+    {
+        "id": 1,
+        "name": "Whiskers",
+        "image": "images/whiskers.jpg",
+        "breed": "Maine Coon",
+        "age": 3,
+        "color": "Brown and White",
+        "gender": "Male",
+        "prev_owner": "Terry Cruz",
+        "fav_treat": "Cat-Man-Doo Extra Large Dried Bonito Flakes",
+        "likes": "Long walks at the beach",
+        "dislikes": "Loud noises",
+        "previous_health_conditions": "None",
+        "friendliness_level": 5,
+        "prefered_environment": "Outside and Inside",
+        "good_for_adoption": "Yes",
+        "description": "A large, friendly cat with a thick coat and full of sodium."
+    },
+ 
+    {
+        "id": 2,
+        "name": "Luna",
+        "image": "images/luna.jpg",
+        "breed": "Siamese",
+        "age": 2,
+        "color": "Cream and Brown",
+        "gender": "Female",
+        "prev_owner": "Lexter Launion",
+        "fav_treat": "Anything that tastes like fish",
+        "likes": "Playing with yarn balls",
+        "dislikes": "Abadonment",
+        "previous_health_conditions": "None",
+        "friendliness_level": 4,
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "Yes",
+        "description": "A vocal and affectionate cat.(Will get political)"
+    },
+ 
+    {
+        "id": 3,
+        "name": "Simba",
+        "image": "images/simba.jpg",
+        "breed": "Russian Blue",
+        "age": 3,
+        "color": "Golden",
+        "gender": "Male",
+        "prev_owner": "Orie Mano",
+        "fav_treat": "The souls of the damned",
+        "likes": "Alone time",
+        "dislikes": "Slippers",
+        "previous_health_conditions": "Fleas",
+        "friendliness_level": 2,
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "Yes",
+        "description": "A majestic cat with a powerful presence and has a raging anger with slippers."
+    },
+ 
+    {
+        "id": 4,
+        "name": "Bacteria",
+        "image": "images/bacteria.jpg",
+        "breed": "Ragdoll",
+        "age": 1,
+        "color": "Brown and White",
+        "gender": "Male",
+        "prev_owner": "Wambi Erie",
+        "fav_treat": "Tuna",
+        "likes": "Sleeping",
+        "dislikes": "Markiplier",
+        "previous_health_conditions": "Diabetes",
+        "friendliness_level": 5,
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "Yes",
+        "description": "A gentle and affectionate cat, will stab you in your sleep."
+    },
+ 
+    {
+        "id": 5,
+        "name": "Chromosome",
+        "image": "images/chromosome.jpg",
+        "breed": "Burmese",
+        "age": 1,
+        "color": "Brown, Black and White",
+        "gender": "Male",
+        "prev_owner": "Anonymous",
+        "fav_treat": "Chicken Nuggets",
+        "likes": "Eating",
+        "dislikes": "Not being given treats",
+        "previous_health_conditions": "Obesity",
+        "friendliness_level": 5,
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "No",
+        "description": "A playful and curious cat, will eat your food when you are not looking, including dino nuggies."
+    },
+ 
+    {
+        "id": 6,
+        "name": "Biggie Cheese",
+        "image": "images/biggie-cheese.jpg",
+        "breed": "American Longhair",
+        "age": 1,
+        "color": "Brown, Black and White",
+        "gender": "Female",
+        "prev_owner": "Ryan Salmo",
+        "fav_treat": "Tuna fish",
+        "likes": "Sleeping 17 hours",
+        "dislikes": "Disruption of said sleep",
+        "previous_health_conditions": "None",
+        "friendliness_level": 3,
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "Yes",
+        "description": "A rather sleepy cat that mostly sleeps in his freetime or whatever time really. Will slap you if you disrupt his beauty sleep"
+    },
+ 
+    {
+        "id": 7,
+        "name": "Burmese Python",
+        "image": "images/burmese-python.jpg",
+        "breed": "Donskoy",
+        "age": 2,
+        "color": "Grey",
+        "gender": "Female",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Water",
+        "likes": "Bathing in the Sun",
+        "dislikes": "Showers",
+        "previous_health_conditions": "None",
+        "friendliness_level": 5, 
+        "prefered_environment": "Outside and Inside",
+        "good_for_adoption": "Yes",
+        "description": "This cat likes to be praised alot. I don't know why but just praise her and she'll love you. (Alot)"
+    },
+ 
+    {
+        "id": 8,
+        "name": "King",
+        "image": "images/king.jpg",
+        "breed": "Persian",
+        "age": 1,
+        "color": "White",
+        "gender": "Male",
+        "prev_owner": "Leon Kennedy", 
+        "fav_treat": "Will eat anything",
+        "likes": "Sitting on a big chair",
+        "dislikes": "Being yelled at",
+        "previous_health_conditions": "None",
+        "friendliness_level": 2, 
+        "prefered_environment": "Outside and Inside",
+        "good_for_adoption": "Yes",
+        "description": "He likes staring down at people at a high place for some reason."
+    },
+ 
+    {
+        "id": 9,
+        "name": "Larry",
+        "image": "images/larry.jpg",
+        "breed": "Persian",
+        "age": 3,
+        "color": "Grey",
+        "gender": "Male",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Cheese",
+        "likes": "Cheese",
+        "dislikes": "Anything but cheese",
+        "previous_health_conditions": "None",
+        "friendliness_level": 5, 
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "Yes",
+        "description": "Larry."
+    },
+ 
+    {
+        "id": 10,
+        "name": "Evil Larry",
+        "image": "images/evil-larry.jpg",
+        "breed": "Scottish Fold",
+        "age": 1,
+        "color": "Orange",
+        "gender": "Female",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Eggs",
+        "likes": "Everything but Larry",
+        "dislikes": "Larry",
+        "previous_health_conditions": "None",
+        "friendliness_level": 1, 
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "No",
+        "description": "Do not let her near Larry, at all cost."
+    },
+ 
+    {
+        "id": 11,
+        "name": "Irish",
+        "image": "images/irish.jpg",
+        "breed": "Siamese",
+        "age": 1,
+        "color": "Orange and white",
+        "gender": "Female",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Irish Meatballs",
+        "likes": "Park Walks",
+        "dislikes": "Showers",
+        "previous_health_conditions": "Arthritis",
+        "friendliness_level": 4, 
+        "prefered_environment": "Outside Only",
+        "good_for_adoption": "Yes",
+        "description": "A very Irish cat, as Irish as you can get."
+    },
+ 
+    {
+        "id": 12,
+        "name": "Poppy",
+        "image": "images/poppy.jpg",
+        "breed": "Burmese",
+        "age": 6,
+        "gender": "Male",
+        "color": "Brown, Black and White",
+        "gender": "Male",
+        "prev_owner": "Mello Dree", 
+        "fav_treat": "Anything with a crunch",
+        "likes": "The plant on the coffee table",
+        "dislikes": "Loud noises",
+        "previous_health_conditions": "None",
+        "friendliness_level": 4, 
+        "prefered_environment": "Outside Only",
+        "good_for_adoption": "Yes",
+        "description": "Likes to bite things, especially if it makes a crunching sound"
+    },
+ 
+    {
+        "id": 13,
+        "name": "Mort",
+        "image": "images/mort.jpg",
+        "breed": "Ragdoll",
+        "age": 2,
+        "color": "Black and White",
+        "gender": "Female",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Dried Fish Flakes",
+        "likes": "Rooftop",
+        "dislikes": "Thunderstorms",
+        "previous_health_conditions": "Diabetes",
+        "friendliness_level": 5, 
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "No",
+        "description": "Please Be sure to hold him close when there is a thunderstorm"
+    },
+ 
+    {
+        "id": 14,
+        "name": "Wart",
+        "image": "images/wart.jpg",
+        "breed": "Chartreux",
+        "age": 5,
+        "color": "Grey",
+        "gender": "Female",
+        "prev_owner": "Sean Gono", 
+        "fav_treat": "Canned Tuna",
+        "likes": "Treated with love and care",
+        "dislikes": "Being left alone",
+        "previous_health_conditions": "None",
+        "friendliness_level": 5, 
+        "prefered_environment": "Inside Only",
+        "good_for_adoption": "Yes",
+        "description": "Loving and affectionate cat, She's perfect, almost too perfect..."
+    },
+ 
+    {
+        "id": 15,
+        "name": "Lexi",
+        "image": "images/lexi.jpg",
+        "breed": "LaPerm",
+        "age": 6,
+        "color": "Brown",
+        "gender": "Male",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Anything really",
+        "likes": "Beaches",
+        "dislikes": "Getting picked up",
+        "previous_health_conditions": "Gingivitis",
+        "friendliness_level": 2, 
+        "prefered_environment": "Outside and Inside",
+        "good_for_adoption": "Yes",
+        "description": "Religously enjoyes the beaches and does not care if you get sand between her fur"
+    },
+ 
+    {
+        "id": 16,
+        "name": "Bob",
+        "image": "images/bob.jpg",
+        "breed": "Munchkin",
+        "age": 1,
+        "color": "Brown, Black and White",
+        "gender": "Male",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Little bread pieces",
+        "likes": "Ear scratches",
+        "dislikes": "Belly rubs",
+        "previous_health_conditions": "None",
+        "friendliness_level": 3, 
+        "prefered_environment": "Outside and Inside",
+        "good_for_adoption": "Yes",
+        "description": "A rescue cat that found, he seems awfully quite and shy but warms up to you eventually."
+    },
+ 
+    {
+        "id": 17,
+        "name": "Ratt",
+        "image": "images/ratt.jpg",
+        "breed": "Snowshoe",
+        "age": 1,
+        "color": "Brown and White",
+        "gender": "Female",
+        "prev_owner": "Melissa", 
+        "fav_treat": "Cheesesticks",
+        "likes": "Not being bullied",
+        "dislikes": "Being bullied",
+        "previous_health_conditions": "Fleas",
+        "friendliness_level": 4, 
+        "prefered_environment": "Outside and Inside",
+        "good_for_adoption": "Yes",
+        "description": "A rescue cat that's found near the park. Her love for cheesesticks though shows no bounds."
+    },
+ 
+    {
+        "id": 18,
+        "name": "Hercules",
+        "image": "images/hercules.jpg",
+        "breed": "Scottish Fold",
+        "age": 1,
+        "color": "Orange",
+        "gender": "Female",
+        "prev_owner": "Roxy Hudson", 
+        "fav_treat": "Cat-Safe milk",
+        "likes": "Sun-Bathing",
+        "dislikes": "Rainy days",
+        "previous_health_conditions": "None",
+        "friendliness_level": 5, 
+        "prefered_environment": "Outside only",
+        "good_for_adoption": "No",
+        "description": "Very outdoorsy and like to sleep alot in the sun."
+    },
+ 
+    {
+        "id": 19,
+        "name": "Satan",
+        "image": "images/satan.jpg",
+        "breed": "Russian White, Black, and Tabby Cat",
+        "age": 5,
+        "color": "Calico",
+        "gender": "Female",
+        "prev_owner": "Anonymous", 
+        "fav_treat": "Anything meat flavoured",
+        "likes": "Watching people sleep",
+        "dislikes": "The voices",
+        "previous_health_conditions": "None",
+        "friendliness_level": 5, 
+        "prefered_environment": "Inside only",
+        "good_for_adoption": "Yes",
+        "description": "She's an odd one, but she's still lovable all the same. Just be sure to keep her fed."
+    },
+ 
+    {
+        "id": 20,
+        "name": "Terry",
+        "image": "images/terry.jpg",
+        "breed": "Dragon Li",
+        "age": 2,
+        "color": "Black and White",
+        "gender": "Female",
+        "prev_owner": "Chen", 
+        "fav_treat": "Dumpling Wrapers",
+        "likes": "Sleeping",
+        "dislikes": "Being surprised",
+        "previous_health_conditions": "None",
+        "friendliness_level": 2, 
+        "prefered_environment": "Outside and Inside",
+        "good_for_adoption": "Yes",
+        "description": "Really enjoyes the restaurant scene, happily watching customers eat and great at pictures."
+    },
+ 
+]
 
-def verify_api_key(request: Request, x_api_key: Optional[str] = Header(default=None)):
-    if BUILD_KEY and x_api_key == BUILD_KEY:
-        return "build"
+#VALIDATION
+validated_cats = [Cat(**cat).model_dump() for cat in cats]
+cats = validated_cats
 
+def verify_api_key(x_api_key: Optional[str] = Header(default=None)):
     scope = API_KEYS.get(x_api_key)
     if scope is None:
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key."
-        )
-
-    allowed_origins = SCOPE_ORIGINS.get(scope)
-    if allowed_origins is not None and request.headers.get("origin") not in allowed_origins:
-        raise HTTPException(
-            status_code=403,
-            detail="This API key isn't valid for this site."
         )
     return scope
 
@@ -128,7 +470,7 @@ def health_check():
     }
 
 # HOME
-@app.get("/api/v1", dependencies=[Depends(require_scope(*ALL_SCOPES))])
+@app.get("/api/v1", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def home():
     return {
         "message": "Welcome to the Simple Cat API!",
@@ -141,46 +483,45 @@ def home():
 
 
 # GET ALL CATS
-@app.get("/api/v1/cats", dependencies=[Depends(require_scope(*ALL_SCOPES))])
+@app.get("/api/v1/cats", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def get_cats():
-    with get_conn() as conn:
-        rows = conn.execute("SELECT * FROM cats ORDER BY id").fetchall()
     return {
-        "count": len(rows),
-        "cats": rows
+        "count": len(cats),
+        "cats": cats
     }
 
-
-    
 # SEARCH CATS
-@app.get("/api/v1/cats/search", dependencies=[Depends(require_scope(*ALL_SCOPES))])
+@app.get("/api/v1/cats/search", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def search_cats(q: str = Query(..., min_length=1)):
-    like = f"%{q}%"
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM cats
-            WHERE name ILIKE %s
-               OR breed ILIKE %s
-               OR color ILIKE %s
-               OR gender ILIKE %s
-               OR prefered_environment ILIKE %s
-            ORDER BY id
-            """,
-            (like, like, like, like, like),
-        ).fetchall()
+    q = q.lower()
+    results = []
+    for cat in cats:
+        searchable_text = (
+            f"{cat['name']}"
+            f"{cat['breed']}"
+            f"{cat['color']}"
+            f"{cat['gender']}"
+            f"{cat['breed']}"
+            f"{cat['prefered_environment']}"
+        ).lower()
+
+        if q in searchable_text:
+            results.append(cat)
+
     return {
-        "query": q.lower(),
-        "count": len(rows),
-        "results": rows
+        "query": q,
+        "count": len(results),
+        "results": results
     }
 
 
 # GET ONE CAT
-@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(require_scope(*ALL_SCOPES))])
+@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
 def get_cat(cat_id: int):
-    with get_conn() as conn:
-        row = conn.execute("SELECT * FROM cats WHERE id = %s", (cat_id,)).fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Cat not found.")
-    return row
+    for cat in cats:
+        if cat["id"] == cat_id:
+            return cat
+    raise HTTPException(
+        status_code=404,
+        detail="Cat not found."
+    )
