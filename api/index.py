@@ -523,7 +523,6 @@ def search_cats(q: str = Query(..., min_length=1)):
     for cat in cats:
         searchable_text = (
             f"{cat['name']}"
-            f"{cat['breed']}"
             f"{cat['color']}"
             f"{cat['gender']}"
             f"{cat['breed']}"
@@ -582,6 +581,7 @@ class CatSubmission(BaseModel):
     dislikes: str = Field(default="", max_length=200)
     friendliness_level: int = Field(default=3, ge=1, le=5)
     prefered_environment: Literal["Inside Only", "Outside Only", "Outside and Inside"] = "Inside Only"
+    good_for_adoption: Literal["Yes", "No"] = "No"
     description: str = Field(min_length=1, max_length=600)
     # Either empty, an https URL, or a small data: URL produced by the frontend.
     image: str = Field(default="", max_length=400000)
@@ -617,7 +617,6 @@ def submit_cat(submission: CatSubmission):
         # legacy fields so the other frontends keep working
         "prev_owner": data["submitted_by"],
         "previous_health_conditions": "None",
-        "good_for_adoption": "N/A",
     }
     cats.append(new_cat)
     return new_cat
