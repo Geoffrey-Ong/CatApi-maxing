@@ -509,7 +509,6 @@ def search_cats(q: str = Query(..., min_length=1)):
             f"{cat['breed']}"
             f"{cat['prefered_environment']}"
             f"{cat.get('country', '')}"
-            f"{cat.get('tone', '')}"
             f"{cat.get('submitted_by', cat['prev_owner'])}"
         ).lower()
 
@@ -558,7 +557,6 @@ class CatSubmission(BaseModel):
     age: int = Field(gt=0, le=40)
     color: str = Field(min_length=1, max_length=60)
     gender: Literal["Male", "Female"]
-    tone: Literal["Funny", "Serious"]
     fav_treat: str = Field(default="Unknown", max_length=100)
     likes: str = Field(default="", max_length=200)
     dislikes: str = Field(default="", max_length=200)
