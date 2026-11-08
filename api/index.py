@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Header, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, Literal 
 
 # Each frontend gets its own key. The value is that key's "scope" — which
@@ -13,6 +13,7 @@ API_KEYS = {
     "adoption-api-key-9770": "adoption",                # Cat Adoption 
     "catTCGcollection-api-key-6767": "collection",      # Cat TCG Home / Collection frontend
     "catTCGbattle-api-key-4242": "battle",              # Cat TCG Battle Owners frontend
+    "carchive-api-key-5150": "archive",                 # CArchive of our own (the only scope allowed to submit cats)
 }
 API_VERSION = "1.0"
 
@@ -470,7 +471,7 @@ def health_check():
     }
 
 # HOME
-@app.get("/api/v1", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
+@app.get("/api/v1", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
 def home():
     return {
         "message": "Welcome to the Simple Cat API!",
@@ -483,7 +484,7 @@ def home():
 
 
 # GET ALL CATS
-@app.get("/api/v1/cats", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
+@app.get("/api/v1/cats", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
 def get_cats():
     return {
         "count": len(cats),
@@ -491,7 +492,7 @@ def get_cats():
     }
 
 # SEARCH CATS
-@app.get("/api/v1/cats/search", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
+@app.get("/api/v1/cats/search", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
 def search_cats(q: str = Query(..., min_length=1)):
     q = q.lower()
     results = []
@@ -501,11 +502,10 @@ def search_cats(q: str = Query(..., min_length=1)):
             f"{cat['breed']}"
             f"{cat['color']}"
             f"{cat['gender']}"
-<<<<<<< HEAD
-=======
-            f"{cat['breed']}"
->>>>>>> c36caac377b1b68939c6a7eed719e5fe1affd8a9
             f"{cat['prefered_environment']}"
+            f"{cat.get('country', '')}"
+            f"{cat.get('tone', '')}"
+            f"{cat.get('submitted_by', cat['prev_owner'])}"
         ).lower()
 
         if q in searchable_text:
@@ -519,7 +519,7 @@ def search_cats(q: str = Query(..., min_length=1)):
 
 
 # GET ONE CAT
-@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(require_scope("adoption", "collection", "battle"))])
+@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
 def get_cat(cat_id: int):
     for cat in cats:
         if cat["id"] == cat_id:
@@ -527,8 +527,54 @@ def get_cat(cat_id: int):
     raise HTTPException(
         status_code=404,
         detail="Cat not found."
-<<<<<<< HEAD
     )
-=======
-    )
->>>>>>> c36caac377b1b68939c6a7eed719e5fe1affd8a9
+
+
+# ---------------------------------------------------------------------------
+# CARCHIVE: SUBMIT A CAT
+# ---------------------------------------------------------------------------
+# Older routes/frontends (Cat Takers, Cat TCG) still expect the original Cat
+# fields, so a submission is stored with those legacy fields filled in
+# (prev_owner = submitted_by, etc.). When the database arrives, this is the one
+# function that changes: swap cats.append(...) for an INSERT.
+
+class CatSubmission(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=60)
+    submitted_by: str = Field(default="Anonymous", max_length=60)
+    country: str = Field(min_length=1, max_length=60)
+    breed: str = Field(min_length=1, max_length=60)
+    age: int = Field(gt=0, le=40)
+    color: str = Field(min_length=1, max_length=60)
+    gender: Literal["Male", "Female"]
+    tone: Literal["Funny", "Serious"]
+    fav_treat: str = Field(default="Unknown", max_length=100)
+    likes: str = Field(default="", max_length=200)
+    dislikes: str = Field(default="", max_length=200)
+    friendliness_level: int = Field(default=3, ge=1, le=5)
+    prefered_environment: Literal["Inside Only", "Outside Only", "Outside and Inside"] = "Inside Only"
+    description: str = Field(min_length=1, max_length=600)
+    # Either empty, an https URL, or a small data: URL produced by the frontend.
+    image: str = Field(default="", max_length=400_000)
+
+    @field_validator("image")
+    @classmethod
+    def image_must_be_safe(cls, value: str):
+        if value and not value.startswith(("https://", "data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")):
+            raise ValueError("image must be an https URL or a jpeg/png/webp data URL")
+        return value
+
+
+@app.post("/api/v1/cats", status_code=201, dependencies=[Depends(require_scope("archive"))])
+def submit_cat(submission: CatSubmission):
+    new_cat = {
+        "id": max((c["id"] for c in cats), default=0) + 1,
+        **submission.model_dump(),
+        # legacy fields so the other frontends keep working
+        "prev_owner": submission.submitted_by,
+        "previous_health_conditions": "None",
+        "good_for_adoption": "N/A",
+    }
+    cats.append(new_cat)
+    return new_cat
