@@ -501,6 +501,10 @@ def search_cats(q: str = Query(..., min_length=1)):
             f"{cat['breed']}"
             f"{cat['color']}"
             f"{cat['gender']}"
+<<<<<<< HEAD
+=======
+            f"{cat['breed']}"
+>>>>>>> c36caac377b1b68939c6a7eed719e5fe1affd8a9
             f"{cat['prefered_environment']}"
         ).lower()
 
@@ -523,4 +527,8 @@ def get_cat(cat_id: int):
     raise HTTPException(
         status_code=404,
         detail="Cat not found."
+<<<<<<< HEAD
     )
+=======
+    )
+>>>>>>> c36caac377b1b68939c6a7eed719e5fe1affd8a9
