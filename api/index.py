@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Header, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field
 from typing import Optional, Literal 
 
 # Each frontend gets its own key. The value is that key's "scope" — which
@@ -436,8 +436,12 @@ cats = [
  
 ]
 
+def to_dict(model):
+    # Pydantic v2 uses model_dump(), v1 uses dict(). Support both.
+    return model.model_dump() if hasattr(model, "model_dump") else model.dict()
+
 #VALIDATION
-validated_cats = [Cat(**cat).model_dump() for cat in cats]
+validated_cats = [to_dict(Cat(**cat)) for cat in cats]
 cats = validated_cats
 
 def verify_api_key(x_api_key: Optional[str] = Header(default=None)):
@@ -502,6 +506,7 @@ def search_cats(q: str = Query(..., min_length=1)):
             f"{cat['breed']}"
             f"{cat['color']}"
             f"{cat['gender']}"
+            f"{cat['breed']}"
             f"{cat['prefered_environment']}"
             f"{cat.get('country', '')}"
             f"{cat.get('tone', '')}"
@@ -533,14 +538,19 @@ def get_cat(cat_id: int):
 # ---------------------------------------------------------------------------
 # CARCHIVE: SUBMIT A CAT
 # ---------------------------------------------------------------------------
+# Written to work on both Pydantic v1 and v2 (no ConfigDict / field_validator).
 # Older routes/frontends (Cat Takers, Cat TCG) still expect the original Cat
-# fields, so a submission is stored with those legacy fields filled in
-# (prev_owner = submitted_by, etc.). When the database arrives, this is the one
-# function that changes: swap cats.append(...) for an INSERT.
+# fields, so a submission is stored with those legacy fields filled in.
+# When the database arrives, swap cats.append(...) in submit_cat for an INSERT.
+
+ALLOWED_IMAGE_PREFIXES = (
+    "https://",
+    "data:image/jpeg;base64,",
+    "data:image/png;base64,",
+    "data:image/webp;base64,",
+)
 
 class CatSubmission(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
     name: str = Field(min_length=1, max_length=60)
     submitted_by: str = Field(default="Anonymous", max_length=60)
     country: str = Field(min_length=1, max_length=60)
@@ -556,23 +566,38 @@ class CatSubmission(BaseModel):
     prefered_environment: Literal["Inside Only", "Outside Only", "Outside and Inside"] = "Inside Only"
     description: str = Field(min_length=1, max_length=600)
     # Either empty, an https URL, or a small data: URL produced by the frontend.
-    image: str = Field(default="", max_length=400_000)
-
-    @field_validator("image")
-    @classmethod
-    def image_must_be_safe(cls, value: str):
-        if value and not value.startswith(("https://", "data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")):
-            raise ValueError("image must be an https URL or a jpeg/png/webp data URL")
-        return value
+    image: str = Field(default="", max_length=400000)
 
 
 @app.post("/api/v1/cats", status_code=201, dependencies=[Depends(require_scope("archive"))])
 def submit_cat(submission: CatSubmission):
+    data = to_dict(submission)
+
+    # trim whitespace on text fields (the image data URL is left untouched)
+    for key, value in data.items():
+        if isinstance(value, str) and key != "image":
+            data[key] = value.strip()
+
+    for key in ("name", "country", "breed", "color", "description"):
+        if not data[key]:
+            raise HTTPException(status_code=422, detail=f"{key} cannot be blank.")
+
+    if not data["submitted_by"]:
+        data["submitted_by"] = "Anonymous"
+    if not data["fav_treat"]:
+        data["fav_treat"] = "Unknown"
+
+    if data["image"] and not data["image"].startswith(ALLOWED_IMAGE_PREFIXES):
+        raise HTTPException(
+            status_code=422,
+            detail="image must be an https URL or a jpeg/png/webp data URL."
+        )
+
     new_cat = {
         "id": max((c["id"] for c in cats), default=0) + 1,
-        **submission.model_dump(),
+        **data,
         # legacy fields so the other frontends keep working
-        "prev_owner": submission.submitted_by,
+        "prev_owner": data["submitted_by"],
         "previous_health_conditions": "None",
         "good_for_adoption": "N/A",
     }
