@@ -1,7 +1,7 @@
 fastapi
 pydantic
 psycopg[binary]>=3.1
-argon2-cffi        # password hashing (Phase 5)
-PyJWT              # login tokens (Phase 5)
-python-dotenv      # local development only
-uvicorn            # local development only
+argon2-cffi        
+PyJWT              
+python-dotenv      
+uvicorn            
