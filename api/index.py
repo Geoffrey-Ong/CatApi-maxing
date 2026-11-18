@@ -1,623 +1,370 @@
-from fastapi import FastAPI, HTTPException, Header, Query, Depends
+"""CArchive API (FastAPI + Neon PostgreSQL). This is the only file in /api.
+
+Routes live here; SQL lives in carchive/db.py; password/token helpers in carchive/security.py.
+"""
+import hmac
+import logging
+import os
+import sys
+from datetime import datetime, timezone
+from typing import Annotated, Literal, Optional
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
-from pydantic import BaseModel, Field
-from typing import Optional, Literal 
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field, StringConstraints
 
-# Each frontend gets its own key. The value is that key's "scope" — which
-# routes it's allowed to call (see require_scope below). Both frontends
-# currently read the same cat data, so both scopes are accepted on the
-# existing routes; a future battle-only route (submitting a move, starting
-# a match, etc.) can be locked to just "battle" by passing require_scope("battle").
-API_KEYS = {
-    "adoption-api-key-9770": "adoption",                # Cat Adoption 
-    "catTCGcollection-api-key-6767": "collection",      # Cat TCG Home / Collection frontend
-    "catTCGbattle-api-key-4242": "battle",              # Cat TCG Battle Owners frontend
-    "carchive-api-key-5150": "archive",                 # CArchive of our own (the only scope allowed to submit cats)
-}
-API_VERSION = "1.0"
+try:                      # local development only; on Vercel the variables come from project settings
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
+# db.py and security.py live in the carchive/ package at the repo root, NOT in /api,
+# because Vercel turns every file inside /api into its own serverless function.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from carchive import db, security  # noqa: E402
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("carchive.api")
 
 app = FastAPI(
-    title="Simple Cat API",
-    description="A beginner-friendly REST API containing information about cats.",
-    version= API_VERSION
+    title="CArchive Cat API",
+    description="Cats from all over the world, told in their owners' words.",
+    version="2.0.0",
 )
 
+# ---------------------------------------------------------------------------
+# CORS. Browsers need to be allowed to send the API key and the login token.
+# ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],                    # tighten to your deployed frontend URLs when they're final
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "x-api-key"],
 )
 
-#DATA MODEL
-class Cat(BaseModel):
-    id: int
-    name: str = Field(min_length=1)
-    image: str = Field(min_length=1)
-    breed: str = Field(min_length=1)
-    age: int = Field(gt=0)
-    color: str = Field(min_length=1)
-    gender: str = Field(min_length=1)
-    country: str = Field(min_length=1)
-    prev_owner: str = Field(min_length=1)
-    fav_treat: str = Field(min_length=1)
-    likes: str 
-    dislikes: str 
-    previous_health_conditions: str = Field(min_length=1)
-    friendliness_level: int = Field(ge=1, le=5)
-    prefered_environment: str = Literal["Inside Only", "Outside Only", "Outside and Inside"]
-    good_for_adoption: str = Field(min_length=1)
-    description: str = Field(min_length=1)
+# ---------------------------------------------------------------------------
+# API keys: one per frontend, read from environment variables (never from code).
+# The key says WHICH frontend is calling; the login token says WHO the user is.
+# ---------------------------------------------------------------------------
+KEY_VARIABLES = {
+    "ARCHIVE_API_KEY": "archive",
+    "ADOPTION_API_KEY": "adoption",
+    "COLLECTION_API_KEY": "collection",
+    "BATTLE_API_KEY": "battle",
+}
+API_KEYS = {scope: os.environ[var] for var, scope in KEY_VARIABLES.items() if os.environ.get(var)}
+if not API_KEYS:
+    log.warning("No API keys are configured; every protected request will be rejected.")
 
-# CAT DATA
-cats = [
-    {
-        "id": 1,
-        "name": "Whiskers",
-        "image": "images/whiskers.jpg",
-        "breed": "Maine Coon",
-        "age": 3,
-        "color": "Brown and White",
-        "gender": "Male",
-        "country": "United States",
-        "prev_owner": "Terry Cruz",
-        "fav_treat": "Cat-Man-Doo Extra Large Dried Bonito Flakes",
-        "likes": "Long walks at the beach",
-        "dislikes": "Loud noises",
-        "previous_health_conditions": "None",
-        "friendliness_level": 5,
-        "prefered_environment": "Outside and Inside",
-        "good_for_adoption": "Yes",
-        "description": "A large, friendly cat with a thick coat and full of sodium."
-    },
- 
-    {
-        "id": 2,
-        "name": "Luna",
-        "image": "images/luna.jpg",
-        "breed": "Siamese",
-        "age": 2,
-        "color": "Cream and Brown",
-        "gender": "Female",
-        "country": "Thailand",
-        "prev_owner": "Lexter Launion",
-        "fav_treat": "Anything that tastes like fish",
-        "likes": "Playing with yarn balls",
-        "dislikes": "Abadonment",
-        "previous_health_conditions": "None",
-        "friendliness_level": 4,
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "Yes",
-        "description": "A vocal and affectionate cat.(Will get political)"
-    },
- 
-    {
-        "id": 3,
-        "name": "Simba",
-        "image": "images/simba.jpg",
-        "breed": "Russian Blue",
-        "age": 3,
-        "color": "Golden",
-        "gender": "Male",
-        "country": "Kenya",
-        "prev_owner": "Orie Mano",
-        "fav_treat": "The souls of the damned",
-        "likes": "Alone time",
-        "dislikes": "Slippers",
-        "previous_health_conditions": "Fleas",
-        "friendliness_level": 2,
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "Yes",
-        "description": "A majestic cat with a powerful presence and has a raging anger with slippers."
-    },
- 
-    {
-        "id": 4,
-        "name": "Bacteria",
-        "image": "images/bacteria.jpg",
-        "breed": "Ragdoll",
-        "age": 1,
-        "color": "Brown and White",
-        "gender": "Male",
-        "country": "Philippines",
-        "prev_owner": "Wambi Erie",
-        "fav_treat": "Tuna",
-        "likes": "Sleeping",
-        "dislikes": "Markiplier",
-        "previous_health_conditions": "Diabetes",
-        "friendliness_level": 5,
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "Yes",
-        "description": "A gentle and affectionate cat, will stab you in your sleep."
-    },
- 
-    {
-        "id": 5,
-        "name": "Chromosome",
-        "image": "images/chromosome.jpg",
-        "breed": "Burmese",
-        "age": 1,
-        "color": "Brown, Black and White",
-        "gender": "Male",
-        "country": "Myanmar",
-        "prev_owner": "Anonymous",
-        "fav_treat": "Chicken Nuggets",
-        "likes": "Eating",
-        "dislikes": "Not being given treats",
-        "previous_health_conditions": "Obesity",
-        "friendliness_level": 5,
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "No",
-        "description": "A playful and curious cat, will eat your food when you are not looking, including dino nuggies."
-    },
- 
-    {
-        "id": 6,
-        "name": "Biggie Cheese",
-        "image": "images/biggie-cheese.jpg",
-        "breed": "American Longhair",
-        "age": 1,
-        "color": "Brown, Black and White",
-        "gender": "Female",
-        "country": "United States",
-        "prev_owner": "Ryan Salmo",
-        "fav_treat": "Tuna fish",
-        "likes": "Sleeping 17 hours",
-        "dislikes": "Disruption of said sleep",
-        "previous_health_conditions": "None",
-        "friendliness_level": 3,
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "Yes",
-        "description": "A rather sleepy cat that mostly sleeps in his freetime or whatever time really. Will slap you if you disrupt his beauty sleep"
-    },
- 
-    {
-        "id": 7,
-        "name": "Burmese Python",
-        "image": "images/burmese-python.jpg",
-        "breed": "Donskoy",
-        "age": 2,
-        "color": "Grey",
-        "gender": "Female",
-        "country": "Russia",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Water",
-        "likes": "Bathing in the Sun",
-        "dislikes": "Showers",
-        "previous_health_conditions": "None",
-        "friendliness_level": 5, 
-        "prefered_environment": "Outside and Inside",
-        "good_for_adoption": "Yes",
-        "description": "This cat likes to be praised alot. I don't know why but just praise her and she'll love you. (Alot)"
-    },
- 
-    {
-        "id": 8,
-        "name": "King",
-        "image": "images/king.jpg",
-        "breed": "Persian",
-        "age": 1,
-        "color": "White",
-        "gender": "Male",
-        "country": "Iran",
-        "prev_owner": "Leon Kennedy", 
-        "fav_treat": "Will eat anything",
-        "likes": "Sitting on a big chair",
-        "dislikes": "Being yelled at",
-        "previous_health_conditions": "None",
-        "friendliness_level": 2, 
-        "prefered_environment": "Outside and Inside",
-        "good_for_adoption": "Yes",
-        "description": "He likes staring down at people at a high place for some reason."
-    },
- 
-    {
-        "id": 9,
-        "name": "Larry",
-        "image": "images/larry.jpg",
-        "breed": "Persian",
-        "age": 3,
-        "color": "Grey",
-        "gender": "Male",
-        "country": "United Kingdom",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Cheese",
-        "likes": "Cheese",
-        "dislikes": "Anything but cheese",
-        "previous_health_conditions": "None",
-        "friendliness_level": 5, 
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "Yes",
-        "description": "Larry."
-    },
- 
-    {
-        "id": 10,
-        "name": "Evil Larry",
-        "image": "images/evil-larry.jpg",
-        "breed": "Scottish Fold",
-        "age": 1,
-        "color": "Orange",
-        "gender": "Female",
-        "country": "United Kingdom",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Eggs",
-        "likes": "Everything but Larry",
-        "dislikes": "Larry",
-        "previous_health_conditions": "None",
-        "friendliness_level": 1, 
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "No",
-        "description": "Do not let her near Larry, at all cost."
-    },
- 
-    {
-        "id": 11,
-        "name": "Irish",
-        "image": "images/irish.jpg",
-        "breed": "Siamese",
-        "age": 1,
-        "color": "Orange and white",
-        "gender": "Female",
-        "country": "Ireland",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Irish Meatballs",
-        "likes": "Park Walks",
-        "dislikes": "Showers",
-        "previous_health_conditions": "Arthritis",
-        "friendliness_level": 4, 
-        "prefered_environment": "Outside Only",
-        "good_for_adoption": "Yes",
-        "description": "A very Irish cat, as Irish as you can get."
-    },
- 
-    {
-        "id": 12,
-        "name": "Poppy",
-        "image": "images/poppy.jpg",
-        "breed": "Burmese",
-        "age": 6,
-        "color": "Brown, Black and White",
-        "gender": "Male",
-        "country": "Thailand",
-        "prev_owner": "Mello Dree", 
-        "fav_treat": "Anything with a crunch",
-        "likes": "The plant on the coffee table",
-        "dislikes": "Loud noises",
-        "previous_health_conditions": "None",
-        "friendliness_level": 4, 
-        "prefered_environment": "Outside Only",
-        "good_for_adoption": "Yes",
-        "description": "Likes to bite things, especially if it makes a crunching sound"
-    },
- 
-    {
-        "id": 13,
-        "name": "Mort",
-        "image": "images/mort.jpg",
-        "breed": "Ragdoll",
-        "age": 2,
-        "color": "Black and White",
-        "gender": "Female",
-        "country": "Germany",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Dried Fish Flakes",
-        "likes": "Rooftop",
-        "dislikes": "Thunderstorms",
-        "previous_health_conditions": "Diabetes",
-        "friendliness_level": 5, 
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "No",
-        "description": "Please Be sure to hold him close when there is a thunderstorm"
-    },
- 
-    {
-        "id": 14,
-        "name": "Wart",
-        "image": "images/wart.jpg",
-        "breed": "Chartreux",
-        "age": 5,
-        "color": "Grey",
-        "gender": "Female",
-        "country": "Philippines",
-        "prev_owner": "Sean Gono", 
-        "fav_treat": "Canned Tuna",
-        "likes": "Treated with love and care",
-        "dislikes": "Being left alone",
-        "previous_health_conditions": "None",
-        "friendliness_level": 5, 
-        "prefered_environment": "Inside Only",
-        "good_for_adoption": "Yes",
-        "description": "Loving and affectionate cat, She's perfect, almost too perfect..."
-    },
- 
-    {
-        "id": 15,
-        "name": "Lexi",
-        "image": "images/lexi.jpg",
-        "breed": "LaPerm",
-        "age": 6,
-        "color": "Brown",
-        "gender": "Male",
-        "country": "Australia",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Anything really",
-        "likes": "Beaches",
-        "dislikes": "Getting picked up",
-        "previous_health_conditions": "Gingivitis",
-        "friendliness_level": 2, 
-        "prefered_environment": "Outside and Inside",
-        "good_for_adoption": "Yes",
-        "description": "Religously enjoyes the beaches and does not care if you get sand between her fur"
-    },
- 
-    {
-        "id": 16,
-        "name": "Bob",
-        "image": "images/bob.jpg",
-        "breed": "Munchkin",
-        "age": 1,
-        "color": "Brown, Black and White",
-        "gender": "Male",
-        "country": "Canada",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Little bread pieces",
-        "likes": "Ear scratches",
-        "dislikes": "Belly rubs",
-        "previous_health_conditions": "None",
-        "friendliness_level": 3, 
-        "prefered_environment": "Outside and Inside",
-        "good_for_adoption": "Yes",
-        "description": "A rescue cat that found, he seems awfully quite and shy but warms up to you eventually."
-    },
- 
-    {
-        "id": 17,
-        "name": "Ratt",
-        "image": "images/ratt.jpg",
-        "breed": "Snowshoe",
-        "age": 1,
-        "color": "Brown and White",
-        "gender": "Female",
-        "country": "Philippines",
-        "prev_owner": "Melissa", 
-        "fav_treat": "Cheesesticks",
-        "likes": "Not being bullied",
-        "dislikes": "Being bullied",
-        "previous_health_conditions": "Fleas",
-        "friendliness_level": 4, 
-        "prefered_environment": "Outside and Inside",
-        "good_for_adoption": "Yes",
-        "description": "A rescue cat that's found near the park. Her love for cheesesticks though shows no bounds."
-    },
- 
-    {
-        "id": 18,
-        "name": "Hercules",
-        "image": "images/hercules.jpg",
-        "breed": "Scottish Fold",
-        "age": 1,
-        "color": "Orange",
-        "gender": "Female",
-        "country": "Greece",
-        "prev_owner": "Roxy Hudson", 
-        "fav_treat": "Cat-Safe milk",
-        "likes": "Sun-Bathing",
-        "dislikes": "Rainy days",
-        "previous_health_conditions": "None",
-        "friendliness_level": 5, 
-        "prefered_environment": "Outside only",
-        "good_for_adoption": "No",
-        "description": "Very outdoorsy and like to sleep alot in the sun."
-    },
- 
-    {
-        "id": 19,
-        "name": "Satan",
-        "image": "images/satan.jpg",
-        "breed": "Russian White, Black, and Tabby Cat",
-        "age": 5,
-        "color": "Calico",
-        "gender": "Female",
-        "country": "Romania",
-        "prev_owner": "Anonymous", 
-        "fav_treat": "Anything meat flavoured",
-        "likes": "Watching people sleep",
-        "dislikes": "The voices",
-        "previous_health_conditions": "None",
-        "friendliness_level": 5, 
-        "prefered_environment": "Inside only",
-        "good_for_adoption": "Yes",
-        "description": "She's an odd one, but she's still lovable all the same. Just be sure to keep her fed."
-    },
- 
-    {
-        "id": 20,
-        "name": "Terry",
-        "image": "images/terry.jpg",
-        "breed": "Dragon Li",
-        "age": 2,
-        "color": "Black and White",
-        "gender": "Female",
-        "country": "China",
-        "prev_owner": "Chen", 
-        "fav_treat": "Dumpling Wrapers",
-        "likes": "Sleeping",
-        "dislikes": "Being surprised",
-        "previous_health_conditions": "None",
-        "friendliness_level": 2, 
-        "prefered_environment": "Outside and Inside",
-        "good_for_adoption": "Yes",
-        "description": "Really enjoyes the restaurant scene, happily watching customers eat and great at pictures."
-    },
- 
-]
+READ_SCOPES = ("adoption", "collection", "battle", "archive")
+ORIGINALS_ONLY_SCOPES = ("collection", "battle")      # the Cat TCG sees only the original 20 cats
 
-def to_dict(model):
-    # Pydantic v2 uses model_dump(), v1 uses dict(). Support both.
-    return model.model_dump() if hasattr(model, "model_dump") else model.dict()
 
-#VALIDATION
-validated_cats = [to_dict(Cat(**cat)) for cat in cats]
-cats = validated_cats
+def verify_api_key(x_api_key: Optional[str] = Header(default=None)) -> str:
+    if x_api_key:
+        for scope, key in API_KEYS.items():
+            if hmac.compare_digest(x_api_key.encode(), key.encode()):
+                return scope
+    raise HTTPException(status_code=401, detail="Invalid or missing API key.")
 
-def verify_api_key(x_api_key: Optional[str] = Header(default=None)):
-    scope = API_KEYS.get(x_api_key)
-    if scope is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API key."
-        )
-    return scope
 
-# Use as Depends(require_scope("collection")), Depends(require_scope("battle")),
-# or Depends(require_scope("collection", "battle")) to accept either key.
-def require_scope(*allowed_scopes: str):
-    def dependency(scope: str = Depends(verify_api_key)):
-        if scope not in allowed_scopes:
-            raise HTTPException(
-                status_code=403,
-                detail="This API key isn't authorized for this endpoint."
-            )
+def require_scope(*allowed: str):
+    def check(scope: str = Depends(verify_api_key)) -> str:
+        if scope not in allowed:
+            raise HTTPException(status_code=403, detail="This API key can't do that.")
         return scope
-    return dependency
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "ok",
-        "service": "Simple Cat API",
-        "version": API_VERSION,
-        "timestamp": datetime.utcnow().isoformat() + "Z"
-    }
-
-# HOME
-@app.get("/api/v1", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
-def home():
-    return {
-        "message": "Welcome to the Simple Cat API!",
-        "endpoints": [
-            "/cats",
-            "/cats/{id}",
-            "/cats/search"
-        ]
-    }
+    return check
 
 
-# GET ALL CATS
-@app.get("/api/v1/cats", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
-def get_cats():
-    return {
-        "count": len(cats),
-        "cats": cats
-    }
+ReadScope = Depends(require_scope(*READ_SCOPES))
+ArchiveOnly = Depends(require_scope("archive"))
 
-# SEARCH CATS
-@app.get("/api/v1/cats/search", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
-def search_cats(q: str = Query(..., min_length=1)):
-    q = q.lower()
-    results = []
-    for cat in cats:
-        searchable_text = (
-            f"{cat['name']}"
-            f"{cat['breed']}"
-            f"{cat['color']}"
-            f"{cat['gender']}"
-            f"{cat['breed']}"
-            f"{cat['prefered_environment']}"
-            f"{cat.get('country', '')}"
-            f"{cat.get('submitted_by', cat['prev_owner'])}"
-        ).lower()
-
-        if q in searchable_text:
-            results.append(cat)
-
-    return {
-        "query": q,
-        "count": len(results),
-        "results": results
-    }
+# ---------------------------------------------------------------------------
+# Logged-in user (Bearer token). The user is re-read from the database on every
+# request, so deleted accounts and role changes take effect immediately.
+# ---------------------------------------------------------------------------
+bearer = HTTPBearer(auto_error=False)
 
 
-# GET ONE CAT
-@app.get("/api/v1/cats/{cat_id}", dependencies=[Depends(require_scope("adoption", "collection", "battle", "archive"))])
-def get_cat(cat_id: int):
-    for cat in cats:
-        if cat["id"] == cat_id:
-            return cat
-    raise HTTPException(
-        status_code=404,
-        detail="Cat not found."
-    )
+def current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer)) -> dict:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Please log in to do that.")
+    user_id = security.read_token(credentials.credentials)
+    user = db.get_user_by_id(user_id) if user_id is not None else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Your session has expired. Please log in again.")
+    return user
+
+
+def require_admin(user: dict = Depends(current_user)) -> dict:
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admins only.")
+    return user
 
 
 # ---------------------------------------------------------------------------
-# CARCHIVE: SUBMIT A CAT
+# Request models. Validation happens here, before anything reaches the database.
 # ---------------------------------------------------------------------------
-# Written to work on both Pydantic v1 and v2 (no ConfigDict / field_validator).
-# Older routes/frontends (Cat Takers, Cat TCG) still expect the original Cat
-# fields, so a submission is stored with those legacy fields filled in.
-# When the database arrives, swap cats.append(...) in submit_cat for an INSERT.
+Required60 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+Optional100 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
+Optional200 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+Story = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600)]
+Environment = Literal["Inside Only", "Outside Only", "Outside and Inside"]
+CatId = Annotated[int, Path(ge=1, le=2_147_483_647)]
 
-ALLOWED_IMAGE_PREFIXES = (
-    "https://",
-    "data:image/jpeg;base64,",
-    "data:image/png;base64,",
-    "data:image/webp;base64,",
-)
+ALLOWED_IMAGE_PREFIXES = ("https://", "data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")
+MAX_IMAGE_LENGTH = 400_000        # characters; the frontend shrinks photos to well under this
+MAX_PENDING_PER_USER = 10         # stops one account flooding the review queue
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(pattern=r"^[A-Za-z0-9_.-]{3,30}$")
+    email: str = Field(max_length=120, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    identifier: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+    password: str = Field(min_length=1, max_length=128)
+
 
 class CatSubmission(BaseModel):
-    name: str = Field(min_length=1, max_length=60)
-    submitted_by: str = Field(default="Anonymous", max_length=60)
-    country: str = Field(min_length=1, max_length=60)
-    breed: str = Field(min_length=1, max_length=60)
-    age: int = Field(gt=0, le=40)
-    color: str = Field(min_length=1, max_length=60)
+    name: Required60
+    country: Required60
+    breed: Required60
+    age: int = Field(ge=1, le=40)
+    color: Required60
     gender: Literal["Male", "Female"]
-    fav_treat: str = Field(default="Unknown", max_length=100)
-    likes: str = Field(default="", max_length=200)
-    dislikes: str = Field(default="", max_length=200)
+    fav_treat: Optional100 = "Unknown"
+    likes: Optional200 = ""
+    dislikes: Optional200 = ""
     friendliness_level: int = Field(default=3, ge=1, le=5)
-    prefered_environment: Literal["Inside Only", "Outside Only", "Outside and Inside"] = "Inside Only"
-    description: str = Field(min_length=1, max_length=600)
-    # Either empty, an https URL, or a small data: URL produced by the frontend.
-    image: str = Field(default="", max_length=400000)
+    prefered_environment: Environment = "Inside Only"
+    good_for_adoption: Literal["Yes", "No"] = "No"
+    description: Story
+    image: str = Field(default="", max_length=MAX_IMAGE_LENGTH)
+    # Anything else a client sends (e.g. the old submitted_by) is ignored: the name always comes from the account.
 
 
-@app.post("/api/v1/cats", status_code=201, dependencies=[Depends(require_scope("archive"))])
-def submit_cat(submission: CatSubmission):
-    data = to_dict(submission)
+class CatUpdate(BaseModel):
+    """Every field optional: only the ones sent are changed."""
+    name: Optional[Required60] = None
+    country: Optional[Required60] = None
+    breed: Optional[Required60] = None
+    age: Optional[int] = Field(default=None, ge=1, le=40)
+    color: Optional[Required60] = None
+    gender: Optional[Literal["Male", "Female"]] = None
+    fav_treat: Optional[Optional100] = None
+    likes: Optional[Optional200] = None
+    dislikes: Optional[Optional200] = None
+    friendliness_level: Optional[int] = Field(default=None, ge=1, le=5)
+    prefered_environment: Optional[Environment] = None
+    good_for_adoption: Optional[Literal["Yes", "No"]] = None
+    description: Optional[Story] = None
+    image: Optional[str] = Field(default=None, max_length=MAX_IMAGE_LENGTH)
+    status: Optional[Literal["pending", "approved", "rejected"]] = None   # admins only
 
-    # trim whitespace on text fields (the image data URL is left untouched)
-    for key, value in data.items():
-        if isinstance(value, str) and key != "image":
-            data[key] = value.strip()
 
-    for key in ("name", "country", "breed", "color", "description"):
-        if not data[key]:
-            raise HTTPException(status_code=422, detail=f"{key} cannot be blank.")
+def check_image(image: Optional[str]) -> None:
+    if image and not image.startswith(ALLOWED_IMAGE_PREFIXES):
+        raise HTTPException(status_code=422, detail="image: must be an https:// link or a JPEG, PNG or WebP upload.")
 
-    if not data["submitted_by"]:
-        data["submitted_by"] = "Anonymous"
-    if not data["fav_treat"]:
-        data["fav_treat"] = "Unknown"
 
-    if data["image"] and not data["image"].startswith(ALLOWED_IMAGE_PREFIXES):
-        raise HTTPException(
-            status_code=422,
-            detail="image must be an https URL or a jpeg/png/webp data URL."
-        )
+# ---------------------------------------------------------------------------
+# Error handling. Clients get short, safe messages; the details go to the logs.
+# ---------------------------------------------------------------------------
+DUPLICATE_MESSAGES = {
+    "users_username_lower_key": "That username is already taken.",
+    "users_email_lower_key": "An account with that email already exists.",
+    "cats_no_duplicates": "That cat has already been submitted (same name, breed, country and owner).",
+}
 
-    new_cat = {
-        "id": max((c["id"] for c in cats), default=0) + 1,
-        **data,
-        # legacy fields so the other frontends keep working
-        "prev_owner": data["submitted_by"],
-        "previous_health_conditions": "None",
-        "good_for_adoption": "N/A",
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    """One readable string, built from field names and messages only. FastAPI's default echoes
+    the submitted values back, which would include passwords."""
+    parts = []
+    for error in exc.errors():
+        path = [str(p) for p in error.get("loc", ()) if p not in ("body", "query", "path")]
+        message = error.get("msg", "Invalid value.")
+        parts.append(f"{path[-1]}: {message}" if path else message)
+    return JSONResponse(status_code=422, content={"detail": " | ".join(parts) or "Invalid request."})
+
+
+@app.exception_handler(db.DuplicateRecord)
+async def duplicate_error(request: Request, exc: db.DuplicateRecord):
+    return JSONResponse(status_code=409, content={"detail": DUPLICATE_MESSAGES.get(exc.constraint, "That record already exists.")})
+
+
+@app.exception_handler(db.DatabaseUnavailable)
+async def database_unavailable(request: Request, exc: db.DatabaseUnavailable):
+    return JSONResponse(status_code=503, content={"detail": "The archive is temporarily unavailable. Please try again shortly."})
+
+
+@app.exception_handler(db.DatabaseError)
+async def database_error(request: Request, exc: db.DatabaseError):
+    return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side."})
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception):
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side."})
+
+
+# ---------------------------------------------------------------------------
+# Public routes
+# ---------------------------------------------------------------------------
+@app.get("/health")
+def health():
+    database_ok = db.ping()
+    return {
+        "status": "ok" if database_ok else "degraded",
+        "service": "carchive-api",
+        "version": app.version,
+        "database": "ok" if database_ok else "unavailable",
+        "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
-    cats.append(new_cat)
-    return new_cat
+
+
+@app.get("/")
+def home():
+    return {
+        "message": "Welcome to the CArchive Cat API.",
+        "docs": "/docs",
+        "endpoints": {
+            "health": "GET /health",
+            "register": "POST /api/v1/auth/register",
+            "login": "POST /api/v1/auth/login",
+            "list": "GET /api/v1/cats",
+            "search": "GET /api/v1/cats/search?q=",
+            "mine": "GET /api/v1/cats/mine (login required)",
+            "pending": "GET /api/v1/cats/pending (admin)",
+            "one": "GET /api/v1/cats/{id}",
+            "submit": "POST /api/v1/cats (login required)",
+            "update": "PATCH /api/v1/cats/{id} (owner or admin)",
+            "delete": "DELETE /api/v1/cats/{id} (owner or admin)",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Accounts
+# ---------------------------------------------------------------------------
+def session_for(user: dict) -> dict:
+    return {"token": security.create_token(user["id"]), "user": {"id": user["id"], "username": user["username"]}}
+
+
+@app.post("/api/v1/auth/register", status_code=201, dependencies=[ArchiveOnly])
+def register(body: RegisterRequest):
+    user = db.create_user(body.username, body.email, security.hash_password(body.password))
+    return session_for(user)
+
+
+@app.post("/api/v1/auth/login", dependencies=[ArchiveOnly])
+def login(body: LoginRequest):
+    user = db.get_user_for_login(body.identifier)
+    # same message and same work whether the account is missing or the password is wrong
+    if not security.check_password(user["password_hash"] if user else None, body.password):
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
+    return session_for(user)
+
+
+# ---------------------------------------------------------------------------
+# Reading cats. Order matters: fixed paths (/search, /mine, /pending) come before /{cat_id}.
+# ---------------------------------------------------------------------------
+@app.get("/api/v1/cats")
+def list_cats(scope: str = ReadScope):
+    cats = db.list_cats(originals_only=scope in ORIGINALS_ONLY_SCOPES)
+    return {"count": len(cats), "cats": cats}
+
+
+@app.get("/api/v1/cats/search")
+def search_cats(
+    q: str = Query(..., min_length=1, max_length=100),
+    good_for_adoption: Optional[Literal["Yes", "No"]] = None,
+    scope: str = ReadScope,
+):
+    term = q.strip()
+    if not term:
+        raise HTTPException(status_code=422, detail="q: enter something to search for.")
+    results = db.search_cats(term, originals_only=scope in ORIGINALS_ONLY_SCOPES, good_for_adoption=good_for_adoption)
+    return {"query": q, "count": len(results), "results": results}
+
+
+@app.get("/api/v1/cats/mine", dependencies=[ArchiveOnly])
+def my_cats(user: dict = Depends(current_user)):
+    cats = db.list_cats_by_user(user["id"])
+    return {"count": len(cats), "cats": cats}
+
+
+@app.get("/api/v1/cats/pending", dependencies=[ArchiveOnly])
+def pending_cats(admin: dict = Depends(require_admin)):
+    cats = db.list_pending()
+    return {"count": len(cats), "cats": cats}
+
+
+@app.get("/api/v1/cats/{cat_id}")
+def get_cat(cat_id: CatId, scope: str = ReadScope):
+    cat = db.get_cat(cat_id, originals_only=scope in ORIGINALS_ONLY_SCOPES)
+    if cat is None:
+        raise HTTPException(status_code=404, detail="Cat not found.")
+    return cat
+
+
+# ---------------------------------------------------------------------------
+# Writing cats (archive frontend only, and only for logged-in users)
+# ---------------------------------------------------------------------------
+@app.post("/api/v1/cats", status_code=201, dependencies=[ArchiveOnly])
+def submit_cat(submission: CatSubmission, user: dict = Depends(current_user)):
+    check_image(submission.image)
+    is_admin = user["role"] == "admin"
+    if not is_admin and db.count_pending(user["id"]) >= MAX_PENDING_PER_USER:
+        raise HTTPException(status_code=429, detail="You have several cats waiting for review. Please wait for them to be approved before adding more.")
+    # new community cats wait for review; an admin's own submissions go straight in
+    return db.create_cat(submission.model_dump(), user["id"], user["username"], status="approved" if is_admin else "pending")
+
+
+def load_editable_cat(cat_id: int, user: dict) -> dict:
+    """The cat, if this user may change it. Admins can change any cat; owners can change their own."""
+    cat = db.get_cat_internal(cat_id)
+    if cat is None:
+        raise HTTPException(status_code=404, detail="Cat not found.")
+    if user["role"] == "admin" or cat["user_id"] == user["id"]:
+        return cat
+    if cat["status"] != "approved":
+        raise HTTPException(status_code=404, detail="Cat not found.")     # don't reveal unapproved cats
+    raise HTTPException(status_code=403, detail="You can only change cats you submitted.")
+
+
+@app.patch("/api/v1/cats/{cat_id}", dependencies=[ArchiveOnly])
+def update_cat(changes: CatUpdate, cat_id: CatId, user: dict = Depends(current_user)):
+    load_editable_cat(cat_id, user)
+    fields = changes.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=422, detail="Send at least one field to change.")
+    nulls = [name for name, value in fields.items() if value is None]
+    if nulls:
+        raise HTTPException(status_code=422, detail=f"{', '.join(nulls)}: can't be null.")
+    check_image(fields.get("image"))
+
+    if user["role"] == "admin":
+        pass                                         # admins may also set status (approve / reject)
+    elif "status" in fields:
+        raise HTTPException(status_code=403, detail="Only admins can change a cat's status.")
+    else:
+        fields["status"] = "pending"                 # an edited cat goes back for review
+
+    return db.update_cat(cat_id, fields)
+
+
+@app.delete("/api/v1/cats/{cat_id}", status_code=204, dependencies=[ArchiveOnly])
+def delete_cat(cat_id: CatId, user: dict = Depends(current_user)):
+    load_editable_cat(cat_id, user)
+    db.delete_cat(cat_id)
+    return Response(status_code=204)

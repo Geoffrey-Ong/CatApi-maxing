@@ -1,2 +1,8 @@
 .env
-backup_catdata.py
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.venv/
+.vercel/
+.vscode/
