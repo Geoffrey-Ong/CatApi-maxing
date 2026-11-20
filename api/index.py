@@ -3,13 +3,17 @@
 Routes live here; SQL lives in carchive/db.py; password/token helpers in carchive/security.py.
 """
 import hmac
+import json
 import logging
+import math
 import os
 import sys
+import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -107,6 +111,19 @@ def require_admin(user: dict = Depends(current_user)) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Who/where a request came from, recorded in the audit log.
+# Vercel sets x-forwarded-for and x-vercel-id itself; locally we fall back to the socket address and a random id.
+# ---------------------------------------------------------------------------
+def request_context(request: Request) -> dict:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "")
+    return {
+        "ip": ip[:64] or None,
+        "request_id": (request.headers.get("x-vercel-id") or str(uuid.uuid4()))[:100],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Request models. Validation happens here, before anything reaches the database.
 # ---------------------------------------------------------------------------
 Required60 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
@@ -116,6 +133,7 @@ Story = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, ma
 Environment = Literal["Inside Only", "Outside Only", "Outside and Inside"]
 CatId = Annotated[int, Path(ge=1, le=2_147_483_647)]
 
+AuditAction = Literal["user.register", "cat.create", "cat.update", "cat.moderate", "cat.delete"]
 ALLOWED_IMAGE_PREFIXES = ("https://", "data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")
 MAX_IMAGE_LENGTH = 400_000        # characters; the frontend shrinks photos to well under this
 MAX_PENDING_PER_USER = 10         # stops one account flooding the review queue
@@ -241,6 +259,7 @@ def home():
             "health": "GET /health",
             "register": "POST /api/v1/auth/register",
             "login": "POST /api/v1/auth/login",
+            "me": "GET /api/v1/auth/me (login required)",
             "list": "GET /api/v1/cats",
             "search": "GET /api/v1/cats/search?q=",
             "mine": "GET /api/v1/cats/mine (login required)",
@@ -249,6 +268,8 @@ def home():
             "submit": "POST /api/v1/cats (login required)",
             "update": "PATCH /api/v1/cats/{id} (owner or admin)",
             "delete": "DELETE /api/v1/cats/{id} (owner or admin)",
+            "audit": "GET /api/v1/audit (admin)",
+            "audit_export": "GET /api/v1/audit/export (admin, downloads audit_log.json)",
         },
     }
 
@@ -257,22 +278,45 @@ def home():
 # Accounts
 # ---------------------------------------------------------------------------
 def session_for(user: dict) -> dict:
-    return {"token": security.create_token(user["id"]), "user": {"id": user["id"], "username": user["username"]}}
+    return {
+        "token": security.create_token(user["id"]),
+        "user": {"id": user["id"], "username": user["username"], "role": user["role"]},
+    }
 
 
 @app.post("/api/v1/auth/register", status_code=201, dependencies=[ArchiveOnly])
-def register(body: RegisterRequest):
-    user = db.create_user(body.username, body.email, security.hash_password(body.password))
+def register(body: RegisterRequest, ctx: dict = Depends(request_context)):
+    user = db.create_user(body.username, body.email, security.hash_password(body.password), ctx)
     return session_for(user)
 
 
 @app.post("/api/v1/auth/login", dependencies=[ArchiveOnly])
-def login(body: LoginRequest):
+def login(body: LoginRequest, ctx: dict = Depends(request_context)):
+    typed = body.identifier.lower()
+    # too many recent failures for this account or this address: refuse before doing any password work
+    wait = db.login_lock_seconds(typed, ctx["ip"])
+    if wait > 0:
+        minutes = max(1, math.ceil(wait / 60))
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed login attempts. Please try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+            headers={"Retry-After": str(wait)},
+        )
+
     user = db.get_user_for_login(body.identifier)
     # same message and same work whether the account is missing or the password is wrong
     if not security.check_password(user["password_hash"] if user else None, body.password):
+        db.record_failed_login(typed, ctx["ip"])
         raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
+
+    db.clear_failed_logins(typed)
     return session_for(user)
+
+
+@app.get("/api/v1/auth/me", dependencies=[ArchiveOnly])
+def whoami(user: dict = Depends(current_user)):
+    """Who the token belongs to, with their current role. The admin page uses it to check access."""
+    return {"id": user["id"], "username": user["username"], "role": user["role"]}
 
 
 # ---------------------------------------------------------------------------
@@ -321,13 +365,13 @@ def get_cat(cat_id: CatId, scope: str = ReadScope):
 # Writing cats (archive frontend only, and only for logged-in users)
 # ---------------------------------------------------------------------------
 @app.post("/api/v1/cats", status_code=201, dependencies=[ArchiveOnly])
-def submit_cat(submission: CatSubmission, user: dict = Depends(current_user)):
+def submit_cat(submission: CatSubmission, user: dict = Depends(current_user), ctx: dict = Depends(request_context)):
     check_image(submission.image)
     is_admin = user["role"] == "admin"
     if not is_admin and db.count_pending(user["id"]) >= MAX_PENDING_PER_USER:
         raise HTTPException(status_code=429, detail="You have several cats waiting for review. Please wait for them to be approved before adding more.")
     # new community cats wait for review; an admin's own submissions go straight in
-    return db.create_cat(submission.model_dump(), user["id"], user["username"], status="approved" if is_admin else "pending")
+    return db.create_cat(submission.model_dump(), user, "approved" if is_admin else "pending", ctx)
 
 
 def load_editable_cat(cat_id: int, user: dict) -> dict:
@@ -343,7 +387,7 @@ def load_editable_cat(cat_id: int, user: dict) -> dict:
 
 
 @app.patch("/api/v1/cats/{cat_id}", dependencies=[ArchiveOnly])
-def update_cat(changes: CatUpdate, cat_id: CatId, user: dict = Depends(current_user)):
+def update_cat(changes: CatUpdate, cat_id: CatId, user: dict = Depends(current_user), ctx: dict = Depends(request_context)):
     load_editable_cat(cat_id, user)
     fields = changes.model_dump(exclude_unset=True)
     if not fields:
@@ -360,11 +404,42 @@ def update_cat(changes: CatUpdate, cat_id: CatId, user: dict = Depends(current_u
     else:
         fields["status"] = "pending"                 # an edited cat goes back for review
 
-    return db.update_cat(cat_id, fields)
+    updated = db.update_cat(cat_id, fields, user, ctx)
+    if updated is None:                              # deleted by someone else between the check and the update
+        raise HTTPException(status_code=404, detail="Cat not found.")
+    return updated
 
 
 @app.delete("/api/v1/cats/{cat_id}", status_code=204, dependencies=[ArchiveOnly])
-def delete_cat(cat_id: CatId, user: dict = Depends(current_user)):
+def delete_cat(cat_id: CatId, user: dict = Depends(current_user), ctx: dict = Depends(request_context)):
     load_editable_cat(cat_id, user)
-    db.delete_cat(cat_id)
+    if not db.delete_cat(cat_id, user, ctx):
+        raise HTTPException(status_code=404, detail="Cat not found.")
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Audit log (admins only)
+# ---------------------------------------------------------------------------
+@app.get("/api/v1/audit", dependencies=[ArchiveOnly])
+def audit_entries(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=1_000_000),
+    action: Optional[AuditAction] = None,
+    target_type: Optional[Literal["cat", "user"]] = None,
+    target_id: Optional[int] = Query(None, ge=1, le=2_147_483_647),
+    admin: dict = Depends(require_admin),
+):
+    entries = db.list_audit(limit, offset, action, target_type, target_id)
+    return {"count": len(entries), "entries": entries}
+
+
+@app.get("/api/v1/audit/export", dependencies=[ArchiveOnly])
+def audit_export(admin: dict = Depends(require_admin)):
+    """The full audit log as a downloadable audit_log.json file (read from the database, so it survives redeploys)."""
+    body = json.dumps(jsonable_encoder(db.export_audit()), indent=2, ensure_ascii=False)
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="audit_log.json"'},
+    )

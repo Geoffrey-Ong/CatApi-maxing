@@ -6,12 +6,15 @@ A connection is opened per request because Vercel instances are stateless. DATAB
 should be Neon's pooled (-pooler) string for the limited carchive_app role.
 """
 import logging
+import math
 import os
 from contextlib import contextmanager
 
 import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
+
+from . import audit
 
 log = logging.getLogger("carchive.db")
 
@@ -155,7 +158,7 @@ def count_pending(user_id: int) -> int:
         ).fetchone()["n"]
 
 
-def create_cat(data: dict, user_id: int, owner_name: str, status: str = "pending"):
+def create_cat(data: dict, user: dict, status: str, ctx: dict):
     columns = list(CAT_INPUT_COLUMNS)
     query = sql.SQL(
         "INSERT INTO cats ({cols}, prev_owner, user_id, status, source) "
@@ -165,37 +168,75 @@ def create_cat(data: dict, user_id: int, owner_name: str, status: str = "pending
         marks=sql.SQL(", ").join([sql.Placeholder()] * len(columns)),
         returning=sql.SQL(OWNER_COLUMNS),
     )
-    params = [data[c] for c in columns] + [owner_name, user_id, status]
+    params = [data[c] for c in columns] + [user["username"], user["id"], status]
     with get_conn() as conn:
-        return conn.execute(query, params).fetchone()
+        row = conn.execute(query, params).fetchone()
+        entry = audit.make_entry("cat.create", user, "cat", row["id"], {
+            "name": row["name"], "breed": row["breed"], "country": row["country"],
+            "status": row["status"], "image": audit.image_note(data["image"]),
+        }, ctx)
+        audit.insert(conn, entry)          # same transaction: both commit, or neither does
+    audit.write_file(entry)
+    return row
 
 
-def update_cat(cat_id: int, changes: dict):
+def update_cat(cat_id: int, changes: dict, user: dict, ctx: dict):
+    """Returns the updated cat, or None if it no longer exists."""
     unknown = set(changes) - set(EDITABLE_COLUMNS)
     if unknown or not changes:
         raise ValueError(f"Cannot update columns: {sorted(unknown)}")
-    query = sql.SQL("UPDATE cats SET {sets}, updated_at = now() WHERE id = %s RETURNING {returning}").format(
+    update = sql.SQL("UPDATE cats SET {sets}, updated_at = now() WHERE id = %s RETURNING {returning}").format(
         sets=sql.SQL(", ").join(sql.SQL("{} = %s").format(sql.Identifier(c)) for c in changes),
         returning=sql.SQL(OWNER_COLUMNS),
     )
+    read_old = sql.SQL("SELECT {cols} FROM cats WHERE id = %s FOR UPDATE").format(
+        cols=sql.SQL(", ").join(sql.Identifier(c) for c in changes)
+    )
     with get_conn() as conn:
-        return conn.execute(query, [*changes.values(), cat_id]).fetchone()
+        old = conn.execute(read_old, (cat_id,)).fetchone()      # locks the row so "before" is accurate
+        if old is None:
+            return None
+        row = conn.execute(update, [*changes.values(), cat_id]).fetchone()
+        action = "cat.moderate" if "status" in changes and user["role"] == "admin" else "cat.update"
+        entry = audit.make_entry(action, user, "cat", cat_id, {"changes": audit.describe_changes(old, changes)}, ctx)
+        audit.insert(conn, entry)
+    audit.write_file(entry)
+    return row
 
 
-def delete_cat(cat_id: int) -> bool:
+def delete_cat(cat_id: int, user: dict, ctx: dict) -> bool:
     with get_conn() as conn:
-        return conn.execute("DELETE FROM cats WHERE id = %s RETURNING id", (cat_id,)).fetchone() is not None
+        gone = conn.execute(
+            "DELETE FROM cats WHERE id = %s "
+            "RETURNING id, name, breed, country, prev_owner, user_id, status, source",
+            (cat_id,),
+        ).fetchone()
+        if gone is None:
+            return False
+        entry = audit.make_entry("cat.delete", user, "cat", cat_id, {"deleted": {
+            "name": gone["name"], "breed": gone["breed"], "country": gone["country"],
+            "owner": gone["prev_owner"], "owner_id": gone["user_id"],
+            "status": gone["status"], "source": gone["source"],
+        }}, ctx)
+        audit.insert(conn, entry)
+    audit.write_file(entry)
+    return True
 
 
 # ------------------------------------------------------------------ users
 
-def create_user(username: str, email: str, password_hash: str):
+def create_user(username: str, email: str, password_hash: str, ctx: dict):
     with get_conn() as conn:
-        return conn.execute(
+        user = conn.execute(
             "INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s) "
             "RETURNING id, username, role",
             (username, email, password_hash),
         ).fetchone()
+        # the new account is its own actor; the email and password hash are deliberately not logged
+        entry = audit.make_entry("user.register", user, "user", user["id"], {"username": user["username"]}, ctx)
+        audit.insert(conn, entry)
+    audit.write_file(entry)
+    return user
 
 
 def get_user_for_login(identifier: str):
@@ -211,3 +252,79 @@ def get_user_for_login(identifier: str):
 def get_user_by_id(user_id: int):
     with get_conn() as conn:
         return conn.execute("SELECT id, username, role FROM users WHERE id = %s", (user_id,)).fetchone()
+
+
+# ------------------------------------------------------------------ login rate limiting
+# Failed attempts live in the database (not in memory) because Vercel runs many short-lived instances
+# that share nothing. Counted per typed username/email AND per IP address.
+
+LOGIN_WINDOW_MINUTES = 15
+MAX_FAILURES_PER_IDENTIFIER = 5      # stops guessing one account's password
+MAX_FAILURES_PER_IP = 20             # stops one address trying many accounts
+
+
+def login_lock_seconds(identifier: str, ip) -> int:
+    """0 if this login may be attempted; otherwise how many seconds until it may be tried again."""
+    wait = 0.0
+    with get_conn() as conn:
+        for column, value, limit in (
+            ("identifier", identifier, MAX_FAILURES_PER_IDENTIFIER),
+            ("ip_address", ip, MAX_FAILURES_PER_IP),
+        ):
+            if value is None:
+                continue
+            rows = conn.execute(
+                f"""SELECT extract(epoch FROM (attempted_at + make_interval(mins => %s) - now())) AS remaining
+                    FROM failed_logins
+                    WHERE {column} = %s AND attempted_at > now() - make_interval(mins => %s)
+                    ORDER BY attempted_at""",
+                (LOGIN_WINDOW_MINUTES, value, LOGIN_WINDOW_MINUTES),
+            ).fetchall()
+            if len(rows) >= limit:
+                # unlocked once enough of the oldest failures age out of the window
+                wait = max(wait, float(rows[len(rows) - limit]["remaining"]))
+    return max(0, math.ceil(wait))
+
+
+def record_failed_login(identifier: str, ip) -> None:
+    with get_conn() as conn:
+        conn.execute("INSERT INTO failed_logins (identifier, ip_address) VALUES (%s, %s)", (identifier, ip))
+        conn.execute("DELETE FROM failed_logins WHERE attempted_at < now() - interval '1 day'")   # keep the table small
+
+
+def clear_failed_logins(identifier: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM failed_logins WHERE identifier = %s", (identifier,))
+
+
+# ------------------------------------------------------------------ audit log reads
+
+AUDIT_COLUMNS = ("id, occurred_at, action, actor_id, actor_username, actor_role, "
+                 "target_type, target_id, details, ip_address, request_id")
+
+
+def list_audit(limit: int, offset: int, action=None, target_type=None, target_id=None):
+    clauses, params = [], []
+    if action:
+        clauses.append("action = %s")
+        params.append(action)
+    if target_type:
+        clauses.append("target_type = %s")
+        params.append(target_type)
+    if target_id is not None:
+        clauses.append("target_id = %s")
+        params.append(target_id)
+    query = f"SELECT {AUDIT_COLUMNS} FROM audit_log"
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)       # clause text is fixed above; values are parameters
+    query += " ORDER BY occurred_at DESC, id DESC LIMIT %s OFFSET %s"
+    with get_conn() as conn:
+        return conn.execute(query, [*params, limit, offset]).fetchall()
+
+
+def export_audit(max_rows: int = 10000):
+    """The whole log, oldest first, for the downloadable .json file."""
+    with get_conn() as conn:
+        return conn.execute(
+            f"SELECT {AUDIT_COLUMNS} FROM audit_log ORDER BY occurred_at, id LIMIT %s", (max_rows,)
+        ).fetchall()
