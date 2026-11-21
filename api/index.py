@@ -260,10 +260,12 @@ def home():
             "register": "POST /api/v1/auth/register",
             "login": "POST /api/v1/auth/login",
             "me": "GET /api/v1/auth/me (login required)",
-            "list": "GET /api/v1/cats",
+            "list": "GET /api/v1/cats (optional: limit, offset, q, breed, country, good_for_adoption, sort)",
             "search": "GET /api/v1/cats/search?q=",
             "mine": "GET /api/v1/cats/mine (login required)",
             "pending": "GET /api/v1/cats/pending (admin)",
+            "rejected": "GET /api/v1/cats/rejected (admin)",
+            "filters": "GET /api/v1/cats/filters",
             "one": "GET /api/v1/cats/{id}",
             "submit": "POST /api/v1/cats (login required)",
             "update": "PATCH /api/v1/cats/{id} (owner or admin)",
@@ -323,9 +325,25 @@ def whoami(user: dict = Depends(current_user)):
 # Reading cats. Order matters: fixed paths (/search, /mine, /pending) come before /{cat_id}.
 # ---------------------------------------------------------------------------
 @app.get("/api/v1/cats")
-def list_cats(scope: str = ReadScope):
-    cats = db.list_cats(originals_only=scope in ORIGINALS_ONLY_SCOPES)
-    return {"count": len(cats), "cats": cats}
+def list_cats(
+    limit: Optional[int] = Query(None, ge=1, le=50),
+    offset: int = Query(0, ge=0, le=1_000_000),
+    q: Optional[str] = Query(None, max_length=100),
+    breed: Optional[str] = Query(None, max_length=60),
+    country: Optional[str] = Query(None, max_length=60),
+    good_for_adoption: Optional[Literal["Yes", "No"]] = None,
+    sort: Literal["oldest", "newest", "name", "age_young", "age_old"] = "oldest",
+    scope: str = ReadScope,
+):
+    originals_only = scope in ORIGINALS_ONLY_SCOPES
+    q = (q or "").strip() or None
+    # No paging, filter or sort parameters: the original behaviour (every approved cat), which the
+    # other frontends rely on. Any of them switches on the paged response, which adds total/limit/offset.
+    if limit is None and offset == 0 and not (q or breed or country or good_for_adoption) and sort == "oldest":
+        cats = db.list_cats(originals_only=originals_only)
+        return {"count": len(cats), "cats": cats}
+    cats, total = db.list_cats_page(limit, offset, sort, q, breed, country, good_for_adoption, originals_only)
+    return {"count": len(cats), "total": total, "limit": limit, "offset": offset, "cats": cats}
 
 
 @app.get("/api/v1/cats/search")
@@ -350,6 +368,18 @@ def my_cats(user: dict = Depends(current_user)):
 @app.get("/api/v1/cats/pending", dependencies=[ArchiveOnly])
 def pending_cats(admin: dict = Depends(require_admin)):
     cats = db.list_pending()
+    return {"count": len(cats), "cats": cats}
+
+
+@app.get("/api/v1/cats/filters")
+def cat_filters(scope: str = ReadScope):
+    """Breeds and countries present among approved cats, for the archive's filter dropdowns."""
+    return db.list_filter_values(originals_only=scope in ORIGINALS_ONLY_SCOPES)
+
+
+@app.get("/api/v1/cats/rejected", dependencies=[ArchiveOnly])
+def rejected_cats(admin: dict = Depends(require_admin)):
+    cats = db.list_rejected()
     return {"count": len(cats), "cats": cats}
 
 

@@ -125,6 +125,65 @@ def search_cats(term: str, originals_only: bool = False, good_for_adoption: str 
         return conn.execute(query, params).fetchall()
 
 
+# Whitelisted ORDER BY clauses: the request picks a KEY, never any SQL text.
+CAT_SORTS = {
+    "oldest": "id",
+    "newest": "id DESC",
+    "name": "lower(name), id",
+    "age_young": "age, id",
+    "age_old": "age DESC, id",
+}
+
+
+def _cat_filters(originals_only, q, breed, country, good_for_adoption):
+    """The WHERE text (fixed pieces only) and its parameters for the filtered archive listing."""
+    clauses, params = ["status = 'approved'"], []
+    if originals_only:
+        clauses.append("source = 'original'")
+    if q:
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        clauses.append("concat_ws(' ', name, breed, color, gender, prefered_environment, country, prev_owner) ILIKE %s")
+        params.append(f"%{escaped}%")
+    if breed:
+        clauses.append("lower(breed) = lower(%s)")
+        params.append(breed)
+    if country:
+        clauses.append("lower(country) = lower(%s)")
+        params.append(country)
+    if good_for_adoption:
+        clauses.append("good_for_adoption = %s")
+        params.append(good_for_adoption)
+    return " AND ".join(clauses), params
+
+
+def list_cats_page(limit, offset, sort="oldest", q=None, breed=None, country=None,
+                   good_for_adoption=None, originals_only=False):
+    """One page of approved cats plus the total that match. limit=None means every match."""
+    where, params = _cat_filters(originals_only, q, breed, country, good_for_adoption)
+    with get_conn() as conn:
+        total = conn.execute(f"SELECT count(*) AS n FROM cats WHERE {where}", params).fetchone()["n"]
+        rows = conn.execute(
+            f"SELECT {PUBLIC_COLUMNS} FROM cats WHERE {where} ORDER BY {CAT_SORTS[sort]} LIMIT %s OFFSET %s",
+            [*params, limit, offset],            # LIMIT NULL means no limit in PostgreSQL
+        ).fetchall()
+    return rows, total
+
+
+def list_filter_values(originals_only: bool = False):
+    """The breeds and countries that exist among approved cats, for the filter dropdowns."""
+    extra = " AND source = 'original'" if originals_only else ""
+    with get_conn() as conn:
+        out = {}
+        for key, column in (("breeds", "breed"), ("countries", "country")):
+            rows = conn.execute(
+                f"SELECT min({column}) AS value FROM cats "
+                f"WHERE status = 'approved' AND {column} <> ''{extra} "
+                f"GROUP BY lower({column}) ORDER BY lower({column})"
+            ).fetchall()
+            out[key] = [row["value"] for row in rows]
+    return out
+
+
 # ------------------------------------------------------------------ cats: owner / admin
 
 def list_cats_by_user(user_id: int):
@@ -140,6 +199,13 @@ def list_pending():
     with get_conn() as conn:
         return conn.execute(
             f"SELECT {OWNER_COLUMNS}, user_id FROM cats WHERE status = 'pending' ORDER BY created_at, id"
+        ).fetchall()
+
+
+def list_rejected():
+    with get_conn() as conn:
+        return conn.execute(
+            f"SELECT {OWNER_COLUMNS}, user_id FROM cats WHERE status = 'rejected' ORDER BY updated_at DESC, id DESC"
         ).fetchall()
 
 
