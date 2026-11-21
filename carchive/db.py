@@ -352,15 +352,45 @@ def login_lock_seconds(identifier: str, ip) -> int:
     return max(0, math.ceil(wait))
 
 
-def record_failed_login(identifier: str, ip) -> None:
+def record_failed_login(identifier: str, ip, user, ctx: dict) -> None:
+    """Store the failure for rate limiting and audit it (also audits the moment a lock begins).
+
+    The typed text is NOT put in the audit log: people sometimes type a password into the username box
+    and the log is append-only. An existing account is identified by its id instead."""
+    account_id = user["id"] if user else None
+    entries = [audit.make_entry("auth.login_failed", None, "user", account_id,
+                                {"reason": "wrong_password" if user else "unknown_account"}, ctx)]
     with get_conn() as conn:
         conn.execute("INSERT INTO failed_logins (identifier, ip_address) VALUES (%s, %s)", (identifier, ip))
         conn.execute("DELETE FROM failed_logins WHERE attempted_at < now() - interval '1 day'")   # keep the table small
+        for scope, column, value, limit in (
+            ("account", "identifier", identifier, MAX_FAILURES_PER_IDENTIFIER),
+            ("ip address", "ip_address", ip, MAX_FAILURES_PER_IP),
+        ):
+            if value is None:
+                continue
+            count = conn.execute(
+                f"SELECT count(*) AS n FROM failed_logins "
+                f"WHERE {column} = %s AND attempted_at > now() - make_interval(mins => %s)",
+                (value, LOGIN_WINDOW_MINUTES),
+            ).fetchone()["n"]
+            if count == limit:      # this failure starts the lock; attempts refused afterwards are not logged
+                entries.append(audit.make_entry(
+                    "auth.locked", None, "user", account_id if scope == "account" else None,
+                    {"scope": scope, "minutes": LOGIN_WINDOW_MINUTES}, ctx))
+        for entry in entries:
+            audit.insert(conn, entry)           # same transaction as the failure record
+    for entry in entries:
+        audit.write_file(entry)
 
 
-def clear_failed_logins(identifier: str) -> None:
+def record_login_success(identifier: str, user: dict, ctx: dict) -> None:
+    """Clear this account's recent failures and audit the login."""
+    entry = audit.make_entry("auth.login", user, "user", user["id"], {}, ctx)
     with get_conn() as conn:
         conn.execute("DELETE FROM failed_logins WHERE identifier = %s", (identifier,))
+        audit.insert(conn, entry)
+    audit.write_file(entry)
 
 
 # ------------------------------------------------------------------ audit log reads

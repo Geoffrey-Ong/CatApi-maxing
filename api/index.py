@@ -133,7 +133,8 @@ Story = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, ma
 Environment = Literal["Inside Only", "Outside Only", "Outside and Inside"]
 CatId = Annotated[int, Path(ge=1, le=2_147_483_647)]
 
-AuditAction = Literal["user.register", "cat.create", "cat.update", "cat.moderate", "cat.delete"]
+AuditAction = Literal["user.register", "cat.create", "cat.update", "cat.moderate", "cat.delete",
+                      "auth.login", "auth.login_failed", "auth.locked"]
 ALLOWED_IMAGE_PREFIXES = ("https://", "data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")
 MAX_IMAGE_LENGTH = 400_000        # characters; the frontend shrinks photos to well under this
 MAX_PENDING_PER_USER = 10         # stops one account flooding the review queue
@@ -308,10 +309,10 @@ def login(body: LoginRequest, ctx: dict = Depends(request_context)):
     user = db.get_user_for_login(body.identifier)
     # same message and same work whether the account is missing or the password is wrong
     if not security.check_password(user["password_hash"] if user else None, body.password):
-        db.record_failed_login(typed, ctx["ip"])
+        db.record_failed_login(typed, ctx["ip"], user, ctx)
         raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
 
-    db.clear_failed_logins(typed)
+    db.record_login_success(typed, user, ctx)
     return session_for(user)
 
 
